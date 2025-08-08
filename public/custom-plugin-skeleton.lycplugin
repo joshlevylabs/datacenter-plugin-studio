@@ -1,0 +1,163 @@
+{
+  "metadata": {
+    "id": "custom-plugin-skeleton",
+    "name": "GRL iPORT",
+    "version": "1.0.2",
+    "description": "",
+    "author": "",
+    "route": "/custom-plugin",
+    "icon": "ChartBarIcon",
+    "permissions": [
+      "devices:read",
+      "devices:write",
+      "measurements:read",
+      "measurements:write",
+      "files:read",
+      "files:write"
+    ],
+    "tauriCommands": [
+      "custom_connect_device",
+      "custom_disconnect_device",
+      "custom_start_sequence",
+      "custom_stop_sequence",
+      "custom_get_results",
+      "custom_configure_sequence",
+      "custom_import_data"
+    ],
+    "category": "Measurement Tools",
+    "tags": [
+      "template",
+      "skeleton",
+      "custom",
+      "measurement"
+    ],
+    "requiresLicense": false,
+    "minCentcomVersion": "1.0.0",
+    "dependencies": []
+  },
+  "frontend": {
+    "main": "import React, { useState, useEffect } from 'react';\nimport { invoke } from '@tauri-apps/api';\nimport { dialog } from '@tauri-apps/api';\nimport {\n  BeakerIcon,\n  DocumentArrowUpIcon,\n  ChartBarIcon,\n  CogIcon,\n  FolderOpenIcon,\n  PlayIcon,\n  DocumentTextIcon,\n  ExclamationTriangleIcon,\n  CheckCircleIcon,\n  ChevronRightIcon,\n  ChevronDownIcon,\n  TableCellsIcon,\n  AdjustmentsHorizontalIcon,\n  XMarkIcon\n} from '@heroicons/react/24/outline';\n\n// Custom hook for persisting plugin state\nconst usePersistedState = (key, defaultValue) => {\n  const [state, setState] = useState(() => {\n    try {\n      const persistedState = localStorage.getItem(key);\n      if (!persistedState) return defaultValue;\n      return JSON.parse(persistedState);\n    } catch (error) {\n      console.error(`Error loading persisted state for key ${key}:`, error);\n      return defaultValue;\n    }\n  });\n  \n  useEffect(() => {\n    try {\n      if (state !== null && state !== undefined) {\n        localStorage.setItem(key, JSON.stringify(state));\n      } else {\n        localStorage.removeItem(key);\n      }\n    } catch (error) {\n      console.error(`Error persisting state for key ${key}:`, error);\n    }\n  }, [key, state]);\n  \n  return [state, setState];\n};\n\n// Main Plugin Component\nconst CustomPluginSkeleton = () => {\n  // Plugin state\n  const [activeTab, setActiveTab] = usePersistedState('custom_active_tab', 'import');\n  const [isConnected, setIsConnected] = usePersistedState('custom_is_connected', false);\n  const [deviceInfo, setDeviceInfo] = usePersistedState('custom_device_info', null);\n  const [measurementData, setMeasurementData] = usePersistedState('custom_measurement_data', null);\n  const [isRunning, setIsRunning] = usePersistedState('custom_is_running', false);\n  const [isLicensed, setIsLicensed] = useState(false);\n  const [error, setError] = useState(null);\n  const [debugLog, setDebugLog] = useState([]);\n  \n  // Load license status on mount\n  useEffect(() => {\n    checkLicenseStatus();\n  }, []);\n  \n  // Check if plugin is licensed\n  const checkLicenseStatus = async () => {\n    try {\n      // This would be replaced with actual license check logic\n      const result = await invoke('check_plugin_license', { \n        pluginId: 'custom-plugin-skeleton' \n      });\n      setIsLicensed(result.licensed);\n      addDebugLog(`License check: ${result.licensed ? 'Valid' : 'Invalid'}`);\n    } catch (err) {\n      setError(`License check failed: ${err.message}`);\n      addDebugLog(`License error: ${err.message}`);\n    }\n  };\n  \n  // Connect to device\n  const handleConnectDevice = async () => {\n    if (isConnected) {\n      return handleDisconnectDevice();\n    }\n    \n    try {\n      setError(null);\n      addDebugLog('Attempting to connect to device...');\n      \n      // This would call your actual Tauri command\n      const result = await invoke('custom_connect_device', {});\n      \n      if (result.success) {\n        setIsConnected(true);\n        setDeviceInfo(result.device);\n        addDebugLog(`Connected to device: ${result.device.name}`);\n      } else {\n        setError(result.error || 'Failed to connect to device');\n        addDebugLog(`Connection failed: ${result.error}`);\n      }\n    } catch (err) {\n      setError(`Connection error: ${err.message}`);\n      addDebugLog(`Connection error: ${err.message}`);\n    }\n  };\n  \n  // Disconnect from device\n  const handleDisconnectDevice = async () => {\n    try {\n      setError(null);\n      addDebugLog('Disconnecting from device...');\n      \n      // This would call your actual Tauri command\n      const result = await invoke('custom_disconnect_device', {});\n      \n      setIsConnected(false);\n      setDeviceInfo(null);\n      addDebugLog('Device disconnected');\n    } catch (err) {\n      setError(`Disconnect error: ${err.message}`);\n      addDebugLog(`Disconnect error: ${err.message}`);\n    }\n  };\n  \n  // Start measurement sequence\n  const handleStartSequence = async () => {\n    try {\n      setError(null);\n      addDebugLog('Starting measurement sequence...');\n      \n      // This would call your actual Tauri command\n      const result = await invoke('custom_start_sequence', {});\n      \n      if (result.success) {\n        setIsRunning(true);\n        addDebugLog('Measurement sequence started');\n      } else {\n        setError(result.error || 'Failed to start sequence');\n        addDebugLog(`Failed to start sequence: ${result.error}`);\n      }\n    } catch (err) {\n      setError(`Start sequence error: ${err.message}`);\n      addDebugLog(`Start sequence error: ${err.message}`);\n    }\n  };\n  \n  // Stop measurement sequence\n  const handleStopSequence = async () => {\n    try {\n      setError(null);\n      addDebugLog('Stopping measurement sequence...');\n      \n      // This would call your actual Tauri command\n      const result = await invoke('custom_stop_sequence', {});\n      \n      setIsRunning(false);\n      addDebugLog('Measurement sequence stopped');\n    } catch (err) {\n      setError(`Stop sequence error: ${err.message}`);\n      addDebugLog(`Stop sequence error: ${err.message}`);\n    }\n  };\n  \n  // Import data file\n  const handleImportFile = async () => {\n    try {\n      setError(null);\n      addDebugLog('Selecting file to import...');\n      \n      // Open file dialog\n      const selected = await dialog.open({\n        multiple: false,\n        filters: [\n          { name: 'Data Files', extensions: ['csv', 'json', 'xml', 'dat'] }\n        ]\n      });\n      \n      if (selected) {\n        addDebugLog(`Selected file: ${selected}`);\n        \n        // This would call your actual Tauri command\n        const result = await invoke('custom_import_data', { \n          filePath: selected \n        });\n        \n        if (result.success) {\n          setMeasurementData(result.data);\n          addDebugLog('Data imported successfully');\n          setActiveTab('analysis');\n        } else {\n          setError(result.error || 'Failed to import data');\n          addDebugLog(`Import failed: ${result.error}`);\n        }\n      }\n    } catch (err) {\n      setError(`Import error: ${err.message}`);\n      addDebugLog(`Import error: ${err.message}`);\n    }\n  };\n  \n  // Save results to project\n  const handleSaveProject = async () => {\n    try {\n      setError(null);\n      addDebugLog('Saving to project...');\n      \n      // This would call your actual Tauri command\n      const result = await invoke('save_to_project', { \n        data: measurementData,\n        metadata: {\n          device: deviceInfo,\n          timestamp: new Date().toISOString(),\n          // Add any additional metadata\n        }\n      });\n      \n      if (result.success) {\n        addDebugLog(`Saved to project: ${result.projectId}`);\n      } else {\n        setError(result.error || 'Failed to save project');\n        addDebugLog(`Save failed: ${result.error}`);\n      }\n    } catch (err) {\n      setError(`Save error: ${err.message}`);\n      addDebugLog(`Save error: ${err.message}`);\n    }\n  };\n  \n  // Add debug log\n  const addDebugLog = (message) => {\n    setDebugLog(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);\n  };\n\n  // Clear all data\n  const handleClearData = () => {\n    if (window.confirm('Are you sure you want to clear all data?')) {\n      setMeasurementData(null);\n      setDebugLog([]);\n      addDebugLog('All data cleared');\n    }\n  };\n  \n  // Render tabs\n  const renderTabContent = () => {\n    switch (activeTab) {\n      case 'import':\n        return (\n          <div className=\"p-4\">\n            <div className=\"flex flex-col space-y-6\">\n              <div className=\"bg-white p-6 rounded-lg shadow\">\n                <h2 className=\"text-xl font-semibold mb-4\">Device Connection</h2>\n                <p className=\"mb-4\">Connect to your measurement device to begin data acquisition.</p>\n                <button\n                  className={`px-4 py-2 rounded ${isConnected ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'} text-white`}\n                  onClick={handleConnectDevice}\n                >\n                  {isConnected ? 'Disconnect Device' : 'Connect Device'}\n                </button>\n                \n                {deviceInfo && (\n                  <div className=\"mt-4 p-4 bg-gray-50 rounded\">\n                    <h3 className=\"font-medium\">Connected Device</h3>\n                    <p>Name: {deviceInfo.name}</p>\n                    <p>Model: {deviceInfo.model}</p>\n                    <p>Serial: {deviceInfo.serial}</p>\n                  </div>\n                )}\n              </div>\n              \n              <div className=\"bg-white p-6 rounded-lg shadow\">\n                <h2 className=\"text-xl font-semibold mb-4\">Import Data</h2>\n                <p className=\"mb-4\">Import data from a file for analysis.</p>\n                <button\n                  className=\"px-4 py-2 rounded bg-green-600 hover:bg-green-700 text-white\"\n                  onClick={handleImportFile}\n                >\n                  Import File\n                </button>\n              </div>\n            </div>\n          </div>\n        );\n        \n      case 'acquisition':\n        return (\n          <div className=\"p-4\">\n            <div className=\"bg-white p-6 rounded-lg shadow\">\n              <h2 className=\"text-xl font-semibold mb-4\">Data Acquisition</h2>\n              <p className=\"mb-4\">{isConnected ? 'Ready to acquire data.' : 'Please connect to a device first.'}</p>\n              \n              {isConnected && (\n                <div className=\"space-x-4\">\n                  {!isRunning ? (\n                    <button\n                      className=\"px-4 py-2 rounded bg-green-600 hover:bg-green-700 text-white\"\n                      onClick={handleStartSequence}\n                    >\n                      Start Acquisition\n                    </button>\n                  ) : (\n                    <button\n                      className=\"px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white\"\n                      onClick={handleStopSequence}\n                    >\n                      Stop Acquisition\n                    </button>\n                  )}\n                </div>\n              )}\n              \n              {isRunning && (\n                <div className=\"mt-6\">\n                  <div className=\"animate-pulse w-full h-4 bg-blue-200 rounded\"></div>\n                  <p className=\"mt-2\">Acquiring data...</p>\n                </div>\n              )}\n            </div>\n          </div>\n        );\n        \n      case 'analysis':\n        return (\n          <div className=\"p-4\">\n            <div className=\"bg-white p-6 rounded-lg shadow\">\n              <h2 className=\"text-xl font-semibold mb-4\">Data Analysis</h2>\n              \n              {measurementData ? (\n                <div>\n                  <p className=\"mb-4\">Data loaded and ready for analysis.</p>\n                  <div className=\"p-4 bg-gray-50 rounded\">\n                    <h3 className=\"font-medium mb-2\">Visualization would go here</h3>\n                    <div className=\"h-60 w-full bg-gray-200 flex items-center justify-center\">\n                      <p className=\"text-gray-600\">Chart Visualization Placeholder</p>\n                    </div>\n                  </div>\n                  \n                  <div className=\"mt-6\">\n                    <button\n                      className=\"px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white mr-4\"\n                      onClick={handleSaveProject}\n                    >\n                      Save to Project\n                    </button>\n                    \n                    <button\n                      className=\"px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white\"\n                      onClick={handleClearData}\n                    >\n                      Clear Data\n                    </button>\n                  </div>\n                </div>\n              ) : (\n                <p>No data available. Please import or acquire data first.</p>\n              )}\n            </div>\n          </div>\n        );\n        \n      case 'settings':\n        return (\n          <div className=\"p-4\">\n            <div className=\"bg-white p-6 rounded-lg shadow\">\n              <h2 className=\"text-xl font-semibold mb-4\">Plugin Settings</h2>\n              \n              <div className=\"mb-6\">\n                <h3 className=\"font-medium mb-2\">License Information</h3>\n                <div className=\"p-4 bg-gray-50 rounded\">\n                  <p>Status: {isLicensed ? (\n                    <span className=\"text-green-600 font-medium\">Licensed</span>\n                  ) : (\n                    <span className=\"text-red-600 font-medium\">Unlicensed</span>\n                  )}</p>\n                  <p className=\"mt-1\">Valid until: {isLicensed ? 'Perpetual' : 'N/A'}</p>\n                </div>\n                \n                {!isLicensed && (\n                  <button\n                    className=\"mt-2 px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white\"\n                    onClick={checkLicenseStatus}\n                  >\n                    Activate License\n                  </button>\n                )}\n              </div>\n              \n              <div className=\"mb-6\">\n                <h3 className=\"font-medium mb-2\">Connection Settings</h3>\n                <div className=\"space-y-4\">\n                  <div>\n                    <label className=\"block text-sm font-medium text-gray-700 mb-1\">Connection Type</label>\n                    <select className=\"block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm\">\n                      <option>TCP/IP</option>\n                      <option>USB</option>\n                      <option>Serial</option>\n                    </select>\n                  </div>\n                  \n                  <div>\n                    <label className=\"block text-sm font-medium text-gray-700 mb-1\">IP Address</label>\n                    <input type=\"text\" placeholder=\"192.168.0.1\" className=\"block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm\" />\n                  </div>\n                  \n                  <div>\n                    <label className=\"block text-sm font-medium text-gray-700 mb-1\">Port</label>\n                    <input type=\"number\" placeholder=\"5000\" className=\"block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm\" />\n                  </div>\n                </div>\n              </div>\n              \n              <div className=\"mb-6\">\n                <h3 className=\"font-medium mb-2\">Debug Logging</h3>\n                <div className=\"p-4 bg-gray-100 rounded h-40 overflow-y-auto\">\n                  {debugLog.length > 0 ? debugLog.map((log, index) => (\n                    <div key={index} className=\"text-xs font-mono mb-1\">{log}</div>\n                  )) : <p className=\"text-gray-500\">No logs available</p>}\n                </div>\n              </div>\n            </div>\n          </div>\n        );\n        \n      default:\n        return <div>Unknown tab</div>;\n    }\n  };\n\n  return (\n    <div className=\"h-full flex flex-col bg-gray-100\">\n      {/* Header */}\n      <div className=\"bg-white p-4 border-b\">\n        <div className=\"flex justify-between items-center\">\n          <h1 className=\"text-2xl font-bold\">Custom Plugin Skeleton</h1>\n          {error && (\n            <div className=\"text-sm text-red-600 flex items-center\">\n              <ExclamationTriangleIcon className=\"h-4 w-4 mr-1\" />\n              {error}\n            </div>\n          )}\n        </div>\n      </div>\n      \n      {/* Navigation Tabs */}\n      <div className=\"bg-white border-b px-4\">\n        <nav className=\"-mb-px flex space-x-8\">\n          {['import', 'acquisition', 'analysis', 'settings'].map((tab) => (\n            <button\n              key={tab}\n              className={`py-3 px-1 border-b-2 font-medium text-sm ${activeTab === tab ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}\n              onClick={() => setActiveTab(tab)}\n            >\n              {tab.charAt(0).toUpperCase() + tab.slice(1)}\n            </button>\n          ))}\n        </nav>\n      </div>\n      \n      {/* Main Content */}\n      <div className=\"flex-1 overflow-auto\">\n        {renderTabContent()}\n      </div>\n    </div>\n  );\n};\n\nexport default CustomPluginSkeleton;",
+    "styles": "/* Any custom CSS styling for the plugin */\n.custom-plugin-container {\n  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;\n}\n\n.custom-chart-container {\n  height: 300px;\n  width: 100%;\n  position: relative;\n}\n\n.custom-loading-indicator {\n  position: absolute;\n  top: 50%;\n  left: 50%;\n  transform: translate(-50%, -50%);\n}"
+  },
+  "backend": {
+    "main": "use std::collections::HashMap;\nuse std::sync::Mutex;\nuse tauri::{command, plugin::TauriPlugin, Runtime, State};\nuse serde::{Serialize, Deserialize};\nuse chrono::prelude::*;\n\n#[derive(Debug, Clone, Serialize, Deserialize)]\nstruct DeviceInfo {\n    name: String,\n    model: String,\n    serial: String,\n    connected: bool,\n}\n\n#[derive(Debug, Clone, Serialize, Deserialize)]\nstruct MeasurementData {\n    timestamp: String,\n    values: Vec<f64>,\n    labels: Vec<String>,\n    metadata: HashMap<String, String>,\n}\n\n#[derive(Debug, Default)]\nstruct PluginState {\n    connected_device: Mutex<Option<DeviceInfo>>,\n    is_running: Mutex<bool>,\n    license: Mutex<Option<License>>,\n}\n\n#[derive(Debug, Clone, Serialize, Deserialize)]\nstruct License {\n    key: String,\n    valid_until: Option<String>,\n    features: Vec<String>,\n}\n\n#[derive(Debug, Clone, Serialize, Deserialize)]\nstruct CommandResponse<T> {\n    success: bool,\n    error: Option<String>,\n    data: Option<T>,\n}\n\nimpl<T> CommandResponse<T> {\n    fn success(data: T) -> Self {\n        CommandResponse {\n            success: true,\n            error: None,\n            data: Some(data),\n        }\n    }\n\n    fn error(message: &str) -> Self {\n        CommandResponse {\n            success: false,\n            error: Some(message.to_string()),\n            data: None,\n        }\n    }\n}\n\n#[command]\nasync fn custom_connect_device(\n    state: State<'_, PluginState>\n) -> Result<CommandResponse<DeviceInfo>, String> {\n    // In a real plugin, you would implement actual device connection logic\n    // For this skeleton, we're just mocking the connection\n    \n    let device = DeviceInfo {\n        name: \"Demo Device\".to_string(),\n        model: \"Model X-1000\".to_string(),\n        serial: \"SN12345678\".to_string(),\n        connected: true,\n    };\n    \n    // Update the plugin state\n    *state.connected_device.lock().unwrap() = Some(device.clone());\n    \n    Ok(CommandResponse::success(device))\n}\n\n#[command]\nasync fn custom_disconnect_device(\n    state: State<'_, PluginState>\n) -> Result<CommandResponse<bool>, String> {\n    // In a real plugin, you would implement actual device disconnection logic\n    // For this skeleton, we're just mocking the disconnection\n    \n    // Update the plugin state\n    *state.connected_device.lock().unwrap() = None;\n    *state.is_running.lock().unwrap() = false;\n    \n    Ok(CommandResponse::success(true))\n}\n\n#[command]\nasync fn custom_start_sequence(\n    state: State<'_, PluginState>\n) -> Result<CommandResponse<bool>, String> {\n    // Check if a device is connected\n    if state.connected_device.lock().unwrap().is_none() {\n        return Ok(CommandResponse::error(\"No device connected\"));\n    }\n    \n    // Check if already running\n    if *state.is_running.lock().unwrap() {\n        return Ok(CommandResponse::error(\"Sequence already running\"));\n    }\n    \n    // In a real plugin, you would start the actual measurement sequence\n    // For this skeleton, we're just updating the state\n    *state.is_running.lock().unwrap() = true;\n    \n    Ok(CommandResponse::success(true))\n}\n\n#[command]\nasync fn custom_stop_sequence(\n    state: State<'_, PluginState>\n) -> Result<CommandResponse<bool>, String> {\n    // In a real plugin, you would stop the actual measurement sequence\n    // For this skeleton, we're just updating the state\n    *state.is_running.lock().unwrap() = false;\n    \n    Ok(CommandResponse::success(true))\n}\n\n#[command]\nasync fn custom_get_results(\n    state: State<'_, PluginState>\n) -> Result<CommandResponse<MeasurementData>, String> {\n    // In a real plugin, you would retrieve actual measurement data\n    // For this skeleton, we're just generating mock data\n    \n    let now = Utc::now();\n    let timestamp = now.to_rfc3339();\n    \n    let data = MeasurementData {\n        timestamp,\n        values: vec![0.1, 0.2, 0.3, 0.4, 0.5],\n        labels: vec![\"Point 1\".to_string(), \"Point 2\".to_string(), \"Point 3\".to_string(), \n                    \"Point 4\".to_string(), \"Point 5\".to_string()],\n        metadata: HashMap::from([\n            (\"unit\".to_string(), \"volts\".to_string()),\n            (\"sampling_rate\".to_string(), \"1000\".to_string()),\n        ]),\n    };\n    \n    Ok(CommandResponse::success(data))\n}\n\n#[command]\nasync fn custom_import_data(\n    file_path: String,\n) -> Result<CommandResponse<MeasurementData>, String> {\n    // In a real plugin, you would read and parse the actual file\n    // For this skeleton, we're just generating mock data based on the file path\n    \n    let now = Utc::now();\n    let timestamp = now.to_rfc3339();\n    \n    let data = MeasurementData {\n        timestamp,\n        values: vec![1.1, 2.2, 3.3, 4.4, 5.5],\n        labels: vec![\"Imported 1\".to_string(), \"Imported 2\".to_string(), \n                    \"Imported 3\".to_string(), \"Imported 4\".to_string(), \n                    \"Imported 5\".to_string()],\n        metadata: HashMap::from([\n            (\"file\".to_string(), file_path),\n            (\"unit\".to_string(), \"amps\".to_string()),\n        ]),\n    };\n    \n    Ok(CommandResponse::success(data))\n}\n\n#[command]\nasync fn custom_configure_sequence(\n    config: HashMap<String, String>,\n) -> Result<CommandResponse<bool>, String> {\n    // In a real plugin, you would validate and store the configuration\n    // For this skeleton, we're just acknowledging receipt\n    \n    Ok(CommandResponse::success(true))\n}\n\n#[command]\nasync fn check_plugin_license(\n    plugin_id: String,\n    state: State<'_, PluginState>,\n) -> Result<CommandResponse<bool>, String> {\n    // In a real plugin, you would validate the license against a secure source\n    // For this skeleton, we're just returning a mock response\n    \n    // Mock license validation\n    let is_valid = plugin_id == \"custom-plugin-skeleton\";\n    \n    if is_valid {\n        // Store license information in state\n        let license = License {\n            key: \"DEMO-LICENSE-KEY\".to_string(),\n            valid_until: None, // Perpetual license\n            features: vec![\"basic\".to_string(), \"advanced\".to_string()],\n        };\n        \n        *state.license.lock().unwrap() = Some(license);\n    } else {\n        *state.license.lock().unwrap() = None;\n    }\n    \n    Ok(CommandResponse::success(is_valid))\n}\n\n// Initialize plugin\npub fn init<R: Runtime>() -> TauriPlugin<R> {\n    let state = PluginState::default();\n    \n    tauri::plugin::Builder::new(\"custom-plugin-skeleton\")\n        .invoke_handler(tauri::generate_handler![\n            custom_connect_device,\n            custom_disconnect_device,\n            custom_start_sequence,\n            custom_stop_sequence,\n            custom_get_results,\n            custom_import_data,\n            custom_configure_sequence,\n            check_plugin_license\n        ])\n        .setup(|app| {\n            app.manage(state);\n            Ok(())\n        })\n        .build()\n}",
+    "sequencer": {
+      "steps": [
+        {
+          "id": "connect_device",
+          "name": "Connect Device",
+          "description": "Connect to measurement device",
+          "command": "custom_connect_device",
+          "parameters": [],
+          "outputs": [
+            "device_info"
+          ]
+        },
+        {
+          "id": "configure_measurement",
+          "name": "Configure Measurement",
+          "description": "Configure measurement parameters",
+          "command": "custom_configure_sequence",
+          "parameters": [
+            {
+              "name": "sampling_rate",
+              "type": "number",
+              "description": "Sampling rate in Hz",
+              "default": 1000,
+              "min": 100,
+              "max": 10000
+            },
+            {
+              "name": "duration",
+              "type": "number",
+              "description": "Measurement duration in seconds",
+              "default": 5,
+              "min": 1,
+              "max": 60
+            }
+          ],
+          "outputs": [
+            "config_success"
+          ]
+        },
+        {
+          "id": "start_measurement",
+          "name": "Start Measurement",
+          "description": "Begin data acquisition sequence",
+          "command": "custom_start_sequence",
+          "parameters": [],
+          "outputs": [
+            "sequence_started"
+          ]
+        },
+        {
+          "id": "get_results",
+          "name": "Get Results",
+          "description": "Retrieve measurement results",
+          "command": "custom_get_results",
+          "parameters": [],
+          "outputs": [
+            "measurement_data"
+          ]
+        },
+        {
+          "id": "disconnect_device",
+          "name": "Disconnect Device",
+          "description": "Disconnect from measurement device",
+          "command": "custom_disconnect_device",
+          "parameters": [],
+          "outputs": [
+            "disconnected"
+          ]
+        },
+        {
+          "id": "save_to_project",
+          "name": "Save To Project",
+          "description": "Save measurement results to project",
+          "command": "save_to_project",
+          "parameters": [
+            {
+              "name": "project_name",
+              "type": "string",
+              "description": "Project name",
+              "default": ""
+            },
+            {
+              "name": "tags",
+              "type": "array",
+              "description": "Tags for categorization",
+              "default": []
+            }
+          ],
+          "outputs": [
+            "save_result"
+          ]
+        }
+      ]
+    }
+  },
+  "license": {
+    "validation": {
+      "type": "token",
+      "mechanism": "rsa",
+      "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzw8y2JNS+IOiRKnMaNKR\nuXxK3AP5dcAdgJUZaXxIK5fi1VJQRy4QjbFUnM4AJVeGEGsHgriWnP6jOKX/EqJu\nMG/QDde6xble9N8D9mpIJoIOZf//u1MJiGQw+Z5lzK8lJLnyn5qvvYsaT6S9Kehw\n7kH0CbmOSDasqFV5F3L9V5K0UIzeGT/KfE6EYzUzT/GUYpHvUbbBN+PtBeb4zGSb\nqEiFgZ1qq9jQzA7Z3qO6flMp8bQ9Utr7pu/pjKKmmJzNzHwH7YlT0Pw06RTZcZ0b\nofVQMzAIibX6l1kXpEzRPFLECrow2QVj/zJoWNOfKIcEKK5v4VxC8lJPQjmOUJFt\nowIDAQAB\n-----END PUBLIC KEY-----"
+    },
+    "features": [
+      {
+        "id": "basic",
+        "name": "Basic Features",
+        "description": "Core plugin functionality including data acquisition and visualization"
+      },
+      {
+        "id": "advanced",
+        "name": "Advanced Features",
+        "description": "Advanced analysis tools and export capabilities"
+      },
+      {
+        "id": "automation",
+        "name": "Automation",
+        "description": "Sequencer automation and batch processing"
+      }
+    ]
+  }
+}
