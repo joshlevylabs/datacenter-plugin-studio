@@ -25,12 +25,7 @@
       "custom_import_data"
     ],
     "category": "Measurement Tools",
-    "tags": [
-      "template",
-      "skeleton",
-      "custom",
-      "measurement"
-    ],
+    "tags": [],
     "requiresLicense": false,
     "minCentcomVersion": "1.0.0",
     "dependencies": []

@@ -9,6 +9,7 @@ const PluginMetadataEditor = ({ metadata, onUpdateMetadata, hideName = false }) 
   const [description, setDescription] = useState(metadata?.description || '');
   const [author, setAuthor] = useState(metadata?.author || '');
   const [category, setCategory] = useState(metadata?.category || 'Measurement Tools');
+  const [tags, setTags] = useState(Array.isArray(metadata?.tags) ? metadata.tags.join(', ') : '');
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState('');
   
@@ -40,7 +41,8 @@ const PluginMetadataEditor = ({ metadata, onUpdateMetadata, hideName = false }) 
         name: name.trim(),
         description: description.trim(),
         author: author.trim(),
-        category: category
+        category: category,
+        tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0)
       };
       
       await onUpdateMetadata(updatedMetadata);
@@ -121,6 +123,22 @@ const PluginMetadataEditor = ({ metadata, onUpdateMetadata, hideName = false }) 
               ))}
             </select>
           </div>
+        </div>
+        
+        <div className="form-group">
+          <label htmlFor="plugin-tags">Tags</label>
+          <input
+            id="plugin-tags"
+            type="text"
+            value={tags}
+            onChange={(e) => setTags(e.target.value)}
+            onBlur={() => {
+              const tagArray = tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+              handleFieldUpdate('tags', tagArray);
+            }}
+            placeholder="Enter tags separated by commas (e.g., measurement, analysis, data)"
+          />
+          <small className="field-help">Separate multiple tags with commas</small>
         </div>
         
         {error && <div className="metadata-error">{error}</div>}

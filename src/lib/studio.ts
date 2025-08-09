@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 
 const CONFIG_KEY = 'pluginStudioRoot'; // store in localStorage for now
 const BUILDS_KEY = 'pluginStudioBuilds';
+const PLUGIN_KEYS_KEY = 'pluginStudioPluginKeys';
 
 export async function getWorkspaceRoot(): Promise<string> {
   const saved = localStorage.getItem(CONFIG_KEY);
@@ -46,6 +47,43 @@ export async function readPlugin(pluginName: string): Promise<PluginFile> {
     contents = JSON.stringify(plugin, null, 2);
   }
   return { path: filePath, contents };
+}
+
+export async function getPluginSize(pluginName: string): Promise<number> {
+  try {
+    const root = await getWorkspaceRoot();
+    const pluginDir = await join(root, pluginName);
+    // Get directory size via Tauri command
+    const sizeBytes = await invoke<number>('get_directory_size', { path: pluginDir });
+    return sizeBytes;
+  } catch {
+    return 0;
+  }
+}
+
+export function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+export function getLatestVersion(pluginName: string): string {
+  const builds = listBuilds();
+  const pluginBuilds = builds.filter(b => b.name === pluginName);
+  if (pluginBuilds.length === 0) return '1.0.0';
+  
+  // Sort by build date and get latest
+  pluginBuilds.sort((a, b) => new Date(b.builtAt).getTime() - new Date(a.builtAt).getTime());
+  return pluginBuilds[0].version;
+}
+
+export function getPluginBuildHistory(pluginName: string): any[] {
+  const builds = listBuilds();
+  return builds
+    .filter(b => b.name === pluginName)
+    .sort((a, b) => new Date(b.builtAt).getTime() - new Date(a.builtAt).getTime());
 }
 
 export async function savePlugin(pluginName: string, data: object): Promise<{ success: boolean }>{
@@ -469,6 +507,56 @@ export function deleteBuild(key: string) {
 
 export function makeBuildKey(): string {
   return `B-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function makePluginKey(): string {
+  return `P-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+export function getOrCreatePluginKey(pluginId: string): string {
+  let map: Record<string, string> = {};
+  try {
+    const raw = localStorage.getItem(PLUGIN_KEYS_KEY);
+    if (raw) map = JSON.parse(raw);
+  } catch {}
+  if (!map[pluginId]) {
+    // Generate sequential key: PGN-001, PGN-002, ...
+    let maxNum = 0;
+    for (const val of Object.values(map)) {
+      const m = /^PGN-(\d+)$/.exec(val);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (n > maxNum) maxNum = n;
+      }
+    }
+    const next = maxNum + 1;
+    const padded = String(next).padStart(3, '0');
+    map[pluginId] = `PGN-${padded}`;
+    localStorage.setItem(PLUGIN_KEYS_KEY, JSON.stringify(map));
+  }
+  return map[pluginId];
+}
+
+export function listPluginKeys(pluginIds: string[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const id of pluginIds) out[id] = getOrCreatePluginKey(id);
+  return out;
+}
+
+/**
+ * Copies a file to the user's Downloads directory. Returns the saved path.
+ * If destName is provided, it will be used; otherwise the source filename will be used.
+ */
+export async function copyFileToDownloads(srcPath: string, destName?: string): Promise<string> {
+  const dir = srcPath.replace(/[\\/][^\\/]*$/, '');
+  try { await invoke('allow_fs_dir', { dir, recursive: true }); } catch {}
+  const data = await readTextFile(srcPath);
+  const downloads = await downloadDir();
+  try { await invoke('allow_fs_dir', { dir: downloads, recursive: true }); } catch {}
+  const name = destName || srcPath.replace(/^.*[\\/]/, '');
+  const targetPath = await join(downloads, name);
+  await writeTextFile(targetPath, data);
+  return targetPath;
 }
 
 export async function readPluginFromPath(filePath: string): Promise<any> {
