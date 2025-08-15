@@ -1,0 +1,423 @@
+/* Plugin GUI Builder Styles */
+.plugin-gui-builder {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: #f8fafc;
+}
+
+.gui-builder-header {
+  padding: 16px;
+  background: white;
+  border-bottom: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.gui-builder-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Tabbed Sidebar */
+.sidebar-container {
+  width: 320px;
+  background: white;
+  border-right: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-tabs {
+  display: flex;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+}
+
+.sidebar-tab {
+  flex: 1;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b7280;
+  transition: all 0.2s ease;
+  border-bottom: 2px solid transparent;
+}
+
+.sidebar-tab:hover:not(:disabled) {
+  color: #374151;
+  background: #f3f4f6;
+}
+
+.sidebar-tab.active {
+  color: #3b82f6;
+  background: white;
+  border-bottom-color: #3b82f6;
+}
+
+.sidebar-tab:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sidebar-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Component Library Sidebar */
+.component-library {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
+}
+
+.library-header {
+  padding: 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.category-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.category-tab {
+  padding: 4px 8px;
+  font-size: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #f9fafb;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.category-tab:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.category-tab.active {
+  background: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
+}
+
+.component-grid {
+  padding: 12px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.component-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: white;
+  cursor: grab;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.component-item:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+  transform: translateY(-1px);
+}
+
+.component-item:active {
+  cursor: grabbing;
+  transform: scale(0.98);
+}
+
+.component-icon {
+  width: 20px;
+  height: 20px;
+  margin-right: 8px;
+  color: #6b7280;
+}
+
+.component-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+}
+
+/* Canvas Area */
+.canvas-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #f8fafc;
+}
+
+.canvas-header {
+  padding: 12px 16px;
+  background: white;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.gui-canvas {
+  flex: 1;
+  position: relative;
+  background: white;
+  margin: 16px;
+  border: 2px dashed #d1d5db;
+  border-radius: 8px;
+  overflow: auto;
+  min-height: 400px;
+  /* Ensure drag events work */
+  z-index: 1;
+}
+
+.gui-canvas.drag-over {
+  border-color: #3b82f6;
+  background-color: #eff6ff;
+}
+
+.empty-canvas {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+
+.drop-indicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  border: 2px dashed #3b82f6;
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.05);
+  pointer-events: none;
+}
+
+.gui-component {
+  transition: all 0.2s;
+}
+
+.gui-component:hover {
+  transform: translateZ(0);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+.gui-component.selected {
+  z-index: 10;
+}
+
+/* Preview Mode Styles */
+.gui-canvas.preview-mode {
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+}
+
+.gui-canvas.preview-mode .gui-component {
+  cursor: default !important;
+  pointer-events: all;
+}
+
+.gui-canvas.preview-mode .gui-component:hover {
+  box-shadow: none;
+}
+
+/* Properties Panel Content */
+.properties-panel-content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
+}
+
+/* Properties Panel (legacy - keeping for backwards compatibility) */
+.properties-panel {
+  width: 320px;
+  background: white;
+  border-left: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  animation: slideInFromRight 0.2s ease-out;
+}
+
+@keyframes slideInFromRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.panel-header {
+  padding: 16px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.no-selection {
+  padding: 40px 20px;
+  text-align: center;
+  color: #6b7280;
+}
+
+.property-editor {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.property-section {
+  margin-bottom: 24px;
+}
+
+.property-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 12px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.property-field {
+  margin-bottom: 12px;
+}
+
+.property-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+  .component-library {
+    width: 240px;
+  }
+  
+  .properties-panel {
+    width: 280px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .gui-builder-content {
+    flex-direction: column;
+  }
+  
+  .component-library {
+    width: 100%;
+    max-height: 200px;
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  
+  .component-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
+    max-height: 150px;
+  }
+  
+  .component-item {
+    flex-direction: column;
+    text-align: center;
+    padding: 12px 8px;
+  }
+  
+  .component-icon {
+    margin-right: 0;
+    margin-bottom: 4px;
+  }
+  
+  .component-name {
+    font-size: 12px;
+  }
+  
+  .properties-panel {
+    width: 100%;
+    max-height: 250px;
+    border-left: none;
+    border-top: 1px solid #e5e7eb;
+  }
+}
+
+/* Dark theme support */
+@media (prefers-color-scheme: dark) {
+  .plugin-gui-builder {
+    background-color: #1f2937;
+  }
+  
+  .gui-builder-header,
+  .component-library,
+  .canvas-header,
+  .properties-panel {
+    background: #374151;
+    border-color: #4b5563;
+  }
+  
+  .gui-canvas {
+    background: #374151;
+    border-color: #6b7280;
+  }
+  
+  .gui-canvas.drag-over {
+    background-color: #1e3a8a;
+    border-color: #3b82f6;
+  }
+  
+  .component-item {
+    background: #4b5563;
+    border-color: #6b7280;
+    color: #f3f4f6;
+  }
+  
+  .category-tab {
+    background: #4b5563;
+    border-color: #6b7280;
+    color: #d1d5db;
+  }
+  
+  .category-tab:hover {
+    background: #6b7280;
+    color: #f3f4f6;
+  }
+  
+  .property-section-title {
+    color: #f3f4f6;
+    border-color: #6b7280;
+  }
+  
+  .property-label {
+    color: #d1d5db;
+  }
+}

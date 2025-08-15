@@ -69,21 +69,52 @@ export function formatFileSize(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-export function getLatestVersion(pluginName: string): string {
-  const builds = listBuilds();
-  const pluginBuilds = builds.filter(b => b.name === pluginName);
-  if (pluginBuilds.length === 0) return '1.0.0';
-  
-  // Sort by build date and get latest
-  pluginBuilds.sort((a, b) => new Date(b.builtAt).getTime() - new Date(a.builtAt).getTime());
-  return pluginBuilds[0].version;
+export async function getLatestVersion(pluginName: string): Promise<string> {
+  try {
+    // First check plugin metadata buildHistory
+    const file = await readPlugin(pluginName);
+    const doc = JSON.parse(file.contents);
+    const buildHistory = doc?.metadata?.buildHistory;
+    
+    if (buildHistory && buildHistory.length > 0) {
+      // Sort by build date and get latest
+      const sorted = buildHistory.sort((a: any, b: any) => new Date(b.builtAt).getTime() - new Date(a.builtAt).getTime());
+      return sorted[0].version;
+    }
+    
+    // Fall back to external builds list
+    const builds = listBuilds();
+    const pluginBuilds = builds.filter(b => b.pluginId === pluginName || b.name === pluginName);
+    if (pluginBuilds.length === 0) return 'NA';
+    
+    // Sort by build date and get latest
+    pluginBuilds.sort((a, b) => new Date(b.builtAt).getTime() - new Date(a.builtAt).getTime());
+    return pluginBuilds[0].version;
+  } catch (error) {
+    return 'NA';
+  }
 }
 
-export function getPluginBuildHistory(pluginName: string): any[] {
-  const builds = listBuilds();
-  return builds
-    .filter(b => b.name === pluginName)
-    .sort((a, b) => new Date(b.builtAt).getTime() - new Date(a.builtAt).getTime());
+export async function getPluginBuildHistory(pluginName: string): Promise<any[]> {
+  try {
+    // First check plugin metadata buildHistory
+    const file = await readPlugin(pluginName);
+    const doc = JSON.parse(file.contents);
+    const buildHistory = doc?.metadata?.buildHistory;
+    
+    if (buildHistory && buildHistory.length > 0) {
+      // Sort by build date (newest first)
+      return buildHistory.sort((a: any, b: any) => new Date(b.builtAt).getTime() - new Date(a.builtAt).getTime());
+    }
+    
+    // Fall back to external builds list
+    const builds = listBuilds();
+    return builds
+      .filter(b => b.pluginId === pluginName || b.name === pluginName)
+      .sort((a, b) => new Date(b.builtAt).getTime() - new Date(a.builtAt).getTime());
+  } catch (error) {
+    return [];
+  }
 }
 
 export async function savePlugin(pluginName: string, data: object): Promise<{ success: boolean }>{
@@ -225,27 +256,69 @@ export async function createPlugin(options: CreatePluginOptions) {
     await mkdir(`${pluginDirRel}/scripts`, { recursive: true, baseDir: BaseDirectory.AppData });
     await writeTextFile(
       `${pluginDirRel}/scripts/build.js`,
-      `const fs=require('fs');const path=require('path');const {exec}=require('child_process');\nconsole.log('Building plugin...');\nexec('npx vite build',(e,so,se)=>{if(so)process.stdout.write(so);if(se)process.stderr.write(se);if(e){console.error('Vite build failed');process.exit(1);}const root=process.cwd();const id='${pluginId}';const src=path.join(root,id+'.lycplugin');const dist=path.join(root,'dist');if(!fs.existsSync(dist))fs.mkdirSync(dist,{recursive:true});if(!fs.existsSync(src)){console.error('Missing .lycplugin at',src);process.exit(1);}fs.copyFileSync(src,path.join(dist,id+'.lycplugin'));console.log('Wrote',path.join(dist,id+'.lycplugin'));});\n`,
+      `import fs from 'fs';\nimport path from 'path';\nimport {exec} from 'child_process';\nconsole.log('Building plugin...');\nexec('npx vite build',(e,so,se)=>{if(so)process.stdout.write(so);if(se)process.stderr.write(se);if(e){console.error('Vite build failed');process.exit(1);}const root=process.cwd();const id='${pluginId}';const src=path.join(root,id+'.lycplugin');const dist=path.join(root,'dist');if(!fs.existsSync(dist))fs.mkdirSync(dist,{recursive:true});if(!fs.existsSync(src)){console.error('Missing .lycplugin at',src);process.exit(1);}fs.copyFileSync(src,path.join(dist,id+'.lycplugin'));console.log('Wrote',path.join(dist,id+'.lycplugin'));});\n`,
       { baseDir: BaseDirectory.AppData }
     );
     await writeTextFile(
       `${pluginDirRel}/scripts/validate.js`,
-      `const fs=require('fs');const path=require('path');const p=path.join(process.cwd(),'${pluginId}.lycplugin');try{const d=JSON.parse(fs.readFileSync(p,'utf8'));if(!d.metadata||!d.metadata.id){console.error('Missing metadata.id');process.exit(1);}console.log('Validation OK');}catch(e){console.error('Validation error',e);process.exit(1);}\n`,
+      `import fs from 'fs';\nimport path from 'path';\nconst p=path.join(process.cwd(),'${pluginId}.lycplugin');try{const d=JSON.parse(fs.readFileSync(p,'utf8'));if(!d.metadata||!d.metadata.id){console.error('Missing metadata.id');process.exit(1);}console.log('Validation OK');}catch(e){console.error('Validation error',e);process.exit(1);}\n`,
       { baseDir: BaseDirectory.AppData }
     );
   } else {
     await mkdir(await join(root, pluginId, 'scripts'), { recursive: true });
     await writeTextFile(
       await join(root, pluginId, 'scripts', 'build.js'),
-      `const fs=require('fs');const path=require('path');const {exec}=require('child_process');\nconsole.log('Building plugin...');\nexec('npx vite build',(e,so,se)=>{if(so)process.stdout.write(so);if(se)process.stderr.write(se);if(e){console.error('Vite build failed');process.exit(1);}const root=process.cwd();const id='${pluginId}';const src=path.join(root,id+'.lycplugin');const dist=path.join(root,'dist');if(!fs.existsSync(dist))fs.mkdirSync(dist,{recursive:true});if(!fs.existsSync(src)){console.error('Missing .lycplugin at',src);process.exit(1);}fs.copyFileSync(src,path.join(dist,id+'.lycplugin'));console.log('Wrote',path.join(dist,id+'.lycplugin'));});\n`
+      `import fs from 'fs';\nimport path from 'path';\nimport {exec} from 'child_process';\nconsole.log('Building plugin...');\nexec('npx vite build',(e,so,se)=>{if(so)process.stdout.write(so);if(se)process.stderr.write(se);if(e){console.error('Vite build failed');process.exit(1);}const root=process.cwd();const id='${pluginId}';const src=path.join(root,id+'.lycplugin');const dist=path.join(root,'dist');if(!fs.existsSync(dist))fs.mkdirSync(dist,{recursive:true});if(!fs.existsSync(src)){console.error('Missing .lycplugin at',src);process.exit(1);}fs.copyFileSync(src,path.join(dist,id+'.lycplugin'));console.log('Wrote',path.join(dist,id+'.lycplugin'));});\n`
     );
     await writeTextFile(
       await join(root, pluginId, 'scripts', 'validate.js'),
-      `const fs=require('fs');const path=require('path');const p=path.join(process.cwd(),'${pluginId}.lycplugin');try{const d=JSON.parse(fs.readFileSync(p,'utf8'));if(!d.metadata||!d.metadata.id){console.error('Missing metadata.id');process.exit(1);}console.log('Validation OK');}catch(e){console.error('Validation error',e);process.exit(1);}\n`
+      `import fs from 'fs';\nimport path from 'path';\nconst p=path.join(process.cwd(),'${pluginId}.lycplugin');try{const d=JSON.parse(fs.readFileSync(p,'utf8'));if(!d.metadata||!d.metadata.id){console.error('Missing metadata.id');process.exit(1);}console.log('Validation OK');}catch(e){console.error('Validation error',e);process.exit(1);}\n`
     );
   }
 
   return { pluginId, pluginDir: pluginDirAbs };
+}
+
+export async function updatePluginScriptsToESModule(pluginName: string) {
+  const root = await getWorkspaceRoot();
+  const appDataPlugins = await join(await appDataDir(), 'plugins');
+  const usingDefaultAppData = root.toLowerCase() === appDataPlugins.toLowerCase();
+  
+  try {
+    if (usingDefaultAppData) {
+      // Update build.js
+      await writeTextFile(
+        `plugins/${pluginName}/scripts/build.js`,
+        `import fs from 'fs';\nimport path from 'path';\nimport {exec} from 'child_process';\nconsole.log('Building plugin...');\nexec('npx vite build',(e,so,se)=>{if(so)process.stdout.write(so);if(se)process.stderr.write(se);if(e){console.error('Vite build failed');process.exit(1);}const root=process.cwd();const id='${pluginName}';const src=path.join(root,id+'.lycplugin');const dist=path.join(root,'dist');if(!fs.existsSync(dist))fs.mkdirSync(dist,{recursive:true});if(!fs.existsSync(src)){console.error('Missing .lycplugin at',src);process.exit(1);}fs.copyFileSync(src,path.join(dist,id+'.lycplugin'));console.log('Wrote',path.join(dist,id+'.lycplugin'));});\n`,
+        { baseDir: BaseDirectory.AppData }
+      );
+      
+      // Update validate.js
+      await writeTextFile(
+        `plugins/${pluginName}/scripts/validate.js`,
+        `import fs from 'fs';\nimport path from 'path';\nconst p=path.join(process.cwd(),'${pluginName}.lycplugin');try{const d=JSON.parse(fs.readFileSync(p,'utf8'));if(!d.metadata||!d.metadata.id){console.error('Missing metadata.id');process.exit(1);}console.log('Validation OK');}catch(e){console.error('Validation error',e);process.exit(1);}\n`,
+        { baseDir: BaseDirectory.AppData }
+      );
+    } else {
+      // Update build.js
+      await writeTextFile(
+        await join(root, pluginName, 'scripts', 'build.js'),
+        `import fs from 'fs';\nimport path from 'path';\nimport {exec} from 'child_process';\nconsole.log('Building plugin...');\nexec('npx vite build',(e,so,se)=>{if(so)process.stdout.write(so);if(se)process.stderr.write(se);if(e){console.error('Vite build failed');process.exit(1);}const root=process.cwd();const id='${pluginName}';const src=path.join(root,id+'.lycplugin');const dist=path.join(root,'dist');if(!fs.existsSync(dist))fs.mkdirSync(dist,{recursive:true});if(!fs.existsSync(src)){console.error('Missing .lycplugin at',src);process.exit(1);}fs.copyFileSync(src,path.join(dist,id+'.lycplugin'));console.log('Wrote',path.join(dist,id+'.lycplugin'));});\n`
+      );
+      
+      // Update validate.js
+      await writeTextFile(
+        await join(root, pluginName, 'scripts', 'validate.js'),
+        `import fs from 'fs';\nimport path from 'path';\nconst p=path.join(process.cwd(),'${pluginName}.lycplugin');try{const d=JSON.parse(fs.readFileSync(p,'utf8'));if(!d.metadata||!d.metadata.id){console.error('Missing metadata.id');process.exit(1);}console.log('Validation OK');}catch(e){console.error('Validation error',e);process.exit(1);}\n`
+      );
+    }
+    
+    console.log(`Updated ${pluginName} scripts to ES module syntax`);
+    return { success: true };
+  } catch (error) {
+    console.error(`Failed to update ${pluginName} scripts:`, error);
+    return { success: false, error: String(error) };
+  }
 }
 
 export async function runDev(pluginName: string) {
@@ -253,6 +326,12 @@ export async function runDev(pluginName: string) {
   const dir = await join(root, pluginName);
   return await invoke<{ success: boolean; stdout: string; stderr: string }>('run_npm', { dir, script: 'dev' });
 }
+export async function installDependencies(pluginName: string) {
+  const root = await getWorkspaceRoot();
+  const dir = await join(root, pluginName);
+  return await invoke<{ success: boolean; stdout: string; stderr: string }>('run_npm_command', { dir, command: 'install' });
+}
+
 export async function runBuild(pluginName: string) {
   const root = await getWorkspaceRoot();
   const dir = await join(root, pluginName);
@@ -294,14 +373,29 @@ export async function exportBuiltPluginToDownloads(pluginName: string): Promise<
     fromDist = false;
   }
 
-  // Determine friendly filename using metadata
+  // Determine friendly filename using metadata ID (not display name)
   let friendlyName = `${pluginName}.lycplugin`;
   try {
     const doc = JSON.parse(contents);
     const meta = doc?.metadata || {};
-    const display = (meta.name || pluginName).toString().toLowerCase().replace(/\s+/g, '-');
+    
+    // DEBUG: Log what's actually in the exported file
+    console.log('=== EXPORT DEBUG ===');
+    console.log('Plugin file being exported:');
+    console.log('meta.id:', meta.id);
+    console.log('meta.name:', meta.name);
+    console.log('meta.route:', meta.route);
+    console.log('pluginName param:', pluginName);
+    console.log('fromDist:', fromDist);
+    console.log('sourcePath:', sourcePath);
+    
+    // Use plugin ID instead of display name to ensure consistency with route
+    const pluginId = (meta.id || pluginName).toString().toLowerCase().replace(/\s+/g, '-');
     const version = (meta.version || '1.0.0').toString();
-    friendlyName = `${display}-v${version}.lycplugin`;
+    friendlyName = `${pluginId}-v${version}.lycplugin`;
+    
+    console.log('Final filename:', friendlyName);
+    console.log('==================');
   } catch {
     // ignore JSON parse error, keep default
   }
@@ -355,7 +449,51 @@ function validatePluginDocInternal(doc: any, infoSeed: string[] = []) {
   if (!meta.id || typeof meta.id !== 'string') errors.push('metadata.id is required');
   if (!meta.name || typeof meta.name !== 'string') errors.push('metadata.name is required');
   if (!meta.version || typeof meta.version !== 'string') warnings.push('metadata.version missing, defaulting to 1.0.0');
-  if (!meta.route || typeof meta.route !== 'string') warnings.push('metadata.route missing; app router may not mount');
+  
+  // Enhanced route validation and auto-fix
+  const expectedRoute = `/${meta.id || 'plugin'}`;
+  
+  // Check for problematic routes
+  if (!meta.route || typeof meta.route !== 'string' || 
+      meta.route.startsWith('#') || 
+      meta.route.trim() === '' ||
+      meta.route === '/') {
+    warnings.push(`metadata.route missing or invalid (${meta.route}), auto-setting to: ${expectedRoute}`);
+    if (doc.metadata) {
+      doc.metadata.route = expectedRoute;
+    } else {
+      doc.metadata = { ...meta, route: expectedRoute };
+    }
+  }
+  // Check if route doesn't match the plugin ID (common mismatch issue)
+  else if (meta.route !== expectedRoute && !meta.route.startsWith('/api/')) {
+    warnings.push(`metadata.route (${meta.route}) doesn't match plugin ID, updating to: ${expectedRoute}`);
+    if (doc.metadata) {
+      doc.metadata.route = expectedRoute;
+    } else {
+      doc.metadata = { ...meta, route: expectedRoute };
+    }
+  }
+  
+  // Validate and fix icon field
+  if (!meta.icon || typeof meta.icon !== 'string' || meta.icon.trim() === '') {
+    warnings.push(`metadata.icon missing, defaulting to: CubeIcon`);
+    if (doc.metadata) {
+      doc.metadata.icon = 'CubeIcon';
+    } else {
+      doc.metadata = { ...meta, icon: 'CubeIcon' };
+    }
+  } else {
+    // Check if icon name is valid (should not contain URLs or paths)
+    if (meta.icon.includes('/') || meta.icon.includes('http') || meta.icon.includes('.')) {
+      warnings.push(`metadata.icon contains invalid characters (${meta.icon}), defaulting to: CubeIcon`);
+      if (doc.metadata) {
+        doc.metadata.icon = 'CubeIcon';
+      } else {
+        doc.metadata = { ...meta, icon: 'CubeIcon' };
+      }
+    }
+  }
   if (Array.isArray(meta.permissions) && meta.permissions.length === 0) warnings.push('metadata.permissions is empty');
 
   if (!doc.frontend || (!doc.frontend.main && !doc.frontend.previewHtml && !doc.frontend.bundle)) {
@@ -391,6 +529,59 @@ function validatePluginDocInternal(doc: any, infoSeed: string[] = []) {
     if (!declared.includes(u)) warnings.push(`Command '${u}' used in sequencer but not declared in metadata.tauriCommands`);
   }
   if (declared.length && used.size === 0) warnings.push('metadata.tauriCommands declared but not referenced by sequencer');
+
+  // Validate licensing configuration if enabled
+  if (doc.licensing && doc.licensing.enabled) {
+    info.push('Licensing system enabled');
+    
+    if (doc.licensing.requiresLicense) {
+      info.push('Plugin requires valid license');
+      
+      // Check license tiers
+      if (!doc.licensing.tiers || doc.licensing.tiers.length === 0) {
+        errors.push('At least one license tier must be defined when licensing is required');
+      } else {
+        doc.licensing.tiers.forEach((tier: any, index: number) => {
+          if (!tier.name) {
+            errors.push(`License tier ${index + 1}: name is required`);
+          }
+          if (tier.price < 0) {
+            errors.push(`License tier ${index + 1}: price cannot be negative`);
+          }
+          if (tier.duration !== 'perpetual' && (!tier.durationValue || tier.durationValue <= 0)) {
+            errors.push(`License tier ${index + 1}: duration value must be positive for non-perpetual licenses`);
+          }
+        });
+        info.push(`License tiers: ${doc.licensing.tiers.length} defined`);
+      }
+      
+      // Check cryptography configuration
+      if (!doc.licensing.cryptography) {
+        warnings.push('Cryptography configuration missing - using defaults');
+      } else {
+        if (!doc.licensing.cryptography.publicKey && !doc.licensing.cryptography.privateKey) {
+          warnings.push('No cryptographic keys generated - licenses cannot be signed or verified');
+        }
+        info.push(`Cryptography: ${doc.licensing.cryptography.algorithm || 'RSA-2048'}`);
+      }
+      
+      // Check remote validation
+      if (doc.licensing.remoteValidation && doc.licensing.remoteValidation.enabled) {
+        if (!doc.licensing.remoteValidation.endpoint) {
+          errors.push('Remote validation endpoint is required when remote validation is enabled');
+        } else {
+          info.push('Remote license validation enabled');
+        }
+      }
+      
+      // Check features
+      if (doc.licensing.features && doc.licensing.features.length > 0) {
+        info.push(`License-controlled features: ${doc.licensing.features.length}`);
+      }
+    } else {
+      info.push('Plugin licensing enabled but not required (optional licensing)');
+    }
+  }
 
   const ok = errors.length === 0;
   if (ok) info.push('Validation OK');
@@ -479,6 +670,9 @@ export type BuildRecord = {
   filename: string;
   builtAt: string; // ISO
   icon?: string;
+  buildName?: string;
+  releaseNotes?: string;
+  buildLogs?: string[];
   extra?: Record<string, any>;
 };
 
@@ -506,7 +700,33 @@ export function deleteBuild(key: string) {
 }
 
 export function makeBuildKey(): string {
-  return `B-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  // Generate sequential key: BLD-001, BLD-002, ...
+  // Track highest number ever used, not just existing builds
+  const BUILD_COUNTER_KEY = 'pluginStudioBuildCounter';
+  
+  // Get current counter from localStorage
+  let counter = parseInt(localStorage.getItem(BUILD_COUNTER_KEY) || '0', 10);
+  
+  // Also check existing builds in case we're migrating or counter was reset
+  const allBuilds = listBuilds();
+  let maxExisting = 0;
+  for (const build of allBuilds) {
+    const m = /^BLD-(\d+)$/.exec(build.key);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (n > maxExisting) maxExisting = n;
+    }
+  }
+  
+  // Use the higher of the two: stored counter or max from existing builds
+  counter = Math.max(counter, maxExisting);
+  
+  // Increment and save the new counter
+  counter++;
+  localStorage.setItem(BUILD_COUNTER_KEY, counter.toString());
+  
+  const padded = String(counter).padStart(3, '0');
+  return `BLD-${padded}`;
 }
 
 export function makePluginKey(): string {

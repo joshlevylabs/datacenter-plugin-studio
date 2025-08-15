@@ -1,6 +1,7 @@
 // src/App.tsx
 import { useEffect, useMemo, useState } from 'react';
 import React from 'react';
+import { readTextFile } from '@tauri-apps/plugin-fs';
 // opener plugin imported globally in Tauri; no direct import needed here
 import {
   createPlugin,
@@ -25,9 +26,17 @@ import {
   formatFileSize,
   getLatestVersion,
   getPluginBuildHistory,
+  updatePluginScriptsToESModule,
+  installDependencies,
 } from './lib/studio';
 import PluginMetadataEditor from './components/PluginMetadataEditor.jsx';
 import VersionEditor from './components/VersionEditor.jsx';
+import LicensingPanel from './components/LicensingPanel.jsx';
+// import LicenseManager from './components/LicenseManager.jsx'; // Unused for now
+import CentcomDemo from './components/CentcomDemo.jsx';
+import PluginGUIBuilder from './components/PluginGUIBuilder.jsx';
+import BuildLogViewer from './components/BuildLogViewer.jsx';
+import CentcomTestPanel from './components/CentcomTestPanel.jsx';
 import {
   PuzzlePieceIcon,
   Cog6ToothIcon,
@@ -100,7 +109,7 @@ export default function App() {
   const [root, setRoot] = useState<string>('');
   const [plugins, setPlugins] = useState<string[]>([]);
   // legacy name state removed (prompt used instead)
-  const [selected, setSelected] = useState<string | 'settings' | 'pluginsTool' | 'simulator' | 'builds' | null>(null);
+  const [selected, setSelected] = useState<string | 'settings' | 'pluginsTool' | 'simulator' | 'builds' | 'centcomDemo' | null>(null);
   const [pluginIconMap, setPluginIconMap] = useState<Record<string, string>>({});
   const [pluginTitleMap, setPluginTitleMap] = useState<Record<string, string>>({});
   const [pluginMetaMap, setPluginMetaMap] = useState<Record<string, any>>({});
@@ -109,7 +118,7 @@ export default function App() {
   // message removed from UI; kept logic simplified
   const { theme, toggleTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<
-    'General' | 'App GUI' | 'App Settings' | 'Sequencer Actions' | 'Licensing'
+    'General' | 'App GUI' | 'App Settings' | 'Sequencer Actions' | 'Licensing' | 'Build Settings' | 'Test'
   >('General');
   const [lastDownloadPath, setLastDownloadPath] = useState<string | null>(null);
   // Simulator state
@@ -137,18 +146,31 @@ export default function App() {
   // pluginKeys prepared for future use (e.g., copy ID)
   const [pluginKeys, setPluginKeys] = useState<Record<string,string>>({});
   const [pluginSizes, setPluginSizes] = useState<Record<string,number>>({});
+  const [pluginVersionMap, setPluginVersionMap] = useState<Record<string,string>>({});
+  const [pluginBuildHistoryMap, setPluginBuildHistoryMap] = useState<Record<string,any[]>>({});
   const [editingCell, setEditingCell] = useState<{pluginId: string, column: string} | null>(null);
   const [searchPlugins, setSearchPlugins] = useState('');
   const [searchBuilds, setSearchBuilds] = useState('');
+  // Build modal state
+  const [buildModalOpen, setBuildModalOpen] = useState(false);
+  const [buildName, setBuildName] = useState('');
+  const [releaseNotes, setReleaseNotes] = useState('');
+  // Build status and notifications
+  const [buildStatus, setBuildStatus] = useState<'idle' | 'building' | 'success' | 'error'>('idle');
+  const [buildMessage, setBuildMessage] = useState('');
+  const [showBuildNotification, setShowBuildNotification] = useState(false);
+  const [buildLogs, setBuildLogs] = useState<string[]>([]);
+  const [showBuildLogs, setShowBuildLogs] = useState(false);
+  const [showCentcomTest, setShowCentcomTest] = useState(false);
   const [selectedPluginIds, setSelectedPluginIds] = useState<string[]>([]);
   const pluginsHeaderCheckboxRef = React.useRef<HTMLInputElement | null>(null);
   const pluginMeta = (id: string) => {
     const meta = pluginMetaMap[id] || { id, name: pluginTitleMap[id]||id, version: '1.0.0', description: '', status: 'active', licenseRequired: false, licenseKeyPresent: false, autoDetected: false, installedAt: undefined, lastSeen: undefined, tags: [], route: '', icon: pluginIconMap[id]||'BeakerIcon' };
     return {
       ...meta,
-      version: getLatestVersion(id),
+      version: pluginVersionMap[id] || 'NA',
       size: pluginSizes[id] || 0,
-      buildHistory: getPluginBuildHistory(id),
+      buildHistory: pluginBuildHistoryMap[id] || [],
     };
   };
   const filteredPlugins = (plugins||[]).filter((p)=>{
@@ -209,10 +231,10 @@ export default function App() {
   const startResizePlugin = (key: string, e: React.MouseEvent) => {
     e.preventDefault();
     const startX = e.clientX;
-    const startW = pluginColumnWidths[key] || 140;
+    const startW = pluginColumnWidths[key] || pluginDefaultWidths[key] || 140;
     const onMove = (ev: MouseEvent) => {
       const delta = ev.clientX - startX;
-      const next = Math.max(80, startW + delta);
+      const next = Math.max(50, Math.min(1000, startW + delta)); // Min 50px, Max 1000px
       setPluginColumnWidths((prev) => {
         const updated = { ...prev, [key]: next };
         localStorage.setItem('pluginsTableColumnWidths', JSON.stringify(updated));
@@ -229,7 +251,7 @@ export default function App() {
 
 
   // Builds table configuration
-  const defaultBuildsOrder = ['checkbox','key','download','name','version','filename','path','built'];
+  const defaultBuildsOrder = ['checkbox','key','download','name','version','buildName','releaseNotes','buildLogs','filename','path','built'];
   const [buildsColumnOrder, setBuildsColumnOrder] = useState<string[]>(() => {
     try { const raw = localStorage.getItem('buildsTableOrder'); if (raw) return JSON.parse(raw); } catch {}
     return defaultBuildsOrder;
@@ -245,10 +267,10 @@ export default function App() {
   const startResizeBuilds = (key: string, e: React.MouseEvent) => {
     e.preventDefault();
     const startX = e.clientX;
-    const startW = buildsColumnWidths[key] || 140;
+    const startW = buildsColumnWidths[key] || buildsDefaultWidths[key] || 140;
     const onMove = (ev: MouseEvent) => {
       const delta = ev.clientX - startX;
-      const next = Math.max(80, startW + delta);
+      const next = Math.max(50, Math.min(1000, startW + delta)); // Min 50px, Max 1000px
       setBuildsColumnWidths((prev)=>{ const updated={...prev,[key]:next}; localStorage.setItem('buildsTableColumnWidths', JSON.stringify(updated)); return updated; });
     };
     const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
@@ -256,13 +278,13 @@ export default function App() {
     window.addEventListener('mouseup', onUp);
   };
   const pluginDefaultWidths: Record<string, number> = {
-    checkbox: 40, key: 90, open: 70, icon: 60, name: 280, version: 120, size: 100,
+    checkbox: 40, key: 120, open: 70, icon: 60, name: 320, version: 120, size: 100,
     status: 120, license: 120, detected: 120, installed: 140, lastSeen: 140,
-    tags: 200, route: 180,
+    tags: 150, route: 180,
   };
   const buildsDefaultWidths: Record<string, number> = {
-    checkbox: 40, key: 90, download: 90, name: 260, version: 120, filename: 260,
-    path: 360, built: 160,
+    checkbox: 40, key: 120, download: 90, name: 300, version: 120, buildName: 200,
+    releaseNotes: 300, buildLogs: 120, filename: 260, path: 360, built: 160,
   };
 
 
@@ -394,16 +416,26 @@ export default function App() {
     setPluginTitleMap(Object.fromEntries(titleEntries));
     setPluginMetaMap(Object.fromEntries(metaEntries));
     
-    // Load plugin sizes
+    // Load plugin sizes, versions, and build history
     const sizes: Record<string,number> = {};
+    const versions: Record<string,string> = {};
+    const buildHistories: Record<string,any[]> = {};
+    
     for (const p of list) {
       try {
         sizes[p] = await getPluginSize(p);
+        versions[p] = await getLatestVersion(p);
+        buildHistories[p] = await getPluginBuildHistory(p);
       } catch {
         sizes[p] = 0;
+        versions[p] = 'NA';
+        buildHistories[p] = [];
       }
     }
+    
     setPluginSizes(sizes);
+    setPluginVersionMap(versions);
+    setPluginBuildHistoryMap(buildHistories);
   }
 
   async function openPlugin(name: string) {
@@ -434,6 +466,365 @@ export default function App() {
     if (!selected) return;
     await savePlugin(selected, doc);
     setPluginDoc(doc);
+  }
+
+  // Function to handle table cell editing of plugin metadata
+  async function handleUpdatePluginMetadata(pluginName: string, updates: any) {
+    try {
+      // Read the current plugin data
+      const pluginFile = await readPlugin(pluginName);
+      const pluginData = JSON.parse(pluginFile.contents);
+      
+      // Update the metadata
+      const updatedData = {
+        ...pluginData,
+        metadata: {
+          ...pluginData.metadata,
+          ...updates
+        }
+      };
+      
+      // Save the updated plugin
+      await savePlugin(pluginName, updatedData);
+      
+      // Update local state if this is the currently selected plugin
+      if (selected === pluginName) {
+        setPluginDoc(updatedData);
+      }
+      
+      // Refresh the plugins list to update the table
+      refresh();
+    } catch (error) {
+      console.error('Failed to update plugin metadata:', error);
+    }
+  }
+
+  // Function to show build notifications
+  function showBuildNotificationMessage(status: 'building' | 'success' | 'error', message: string) {
+    setBuildStatus(status);
+    setBuildMessage(message);
+    setShowBuildNotification(true);
+    
+    // Add to build logs
+    addBuildLog(`[${status.toUpperCase()}] ${message}`);
+    
+    // Auto-hide success notifications after 5 seconds
+    if (status === 'success') {
+      setTimeout(() => {
+        setShowBuildNotification(false);
+      }, 5000);
+    }
+  }
+
+  const addBuildLog = (log: string) => {
+    const timestamp = new Date().toLocaleTimeString();
+    const formattedLog = `[${timestamp}] ${log}`;
+    setBuildLogs(prev => [...prev, formattedLog]);
+    console.log('Added build log:', formattedLog); // Debug logging
+  };
+
+  const clearBuildLogs = () => {
+    setBuildLogs([]);
+  };
+
+  // Function to check if a version already exists in builds
+  function versionExists(pluginId: string, version: string): boolean {
+    const existingBuilds = listBuilds();
+    return existingBuilds.some(build => build.pluginId === pluginId && build.version === version);
+  }
+
+  // Function to increment version
+  function incrementVersion(version: string): string {
+    const parts = version.split('.').map(Number);
+    if (parts.length !== 3) return '1.0.1'; // fallback
+    parts[2]++; // increment patch version
+    return parts.join('.');
+  }
+
+  // Function to handle building with name and release notes
+  async function handleBuildWithMetadata(buildName: string, releaseNotes: string) {
+    if (!selected || typeof selected !== 'string') return;
+    
+    setBuildStatus('building');
+    clearBuildLogs(); // Clear previous build logs
+    
+    // Track logs locally to ensure they're captured for the BuildRecord
+    const currentBuildLogs: string[] = [];
+    
+    const addLocalBuildLog = (log: string) => {
+      const timestamp = new Date().toLocaleTimeString();
+      const formattedLog = `[${timestamp}] ${log}`;
+      currentBuildLogs.push(formattedLog);
+      addBuildLog(log); // Also add to React state for UI
+    };
+    
+    // Add initial build logs
+    addLocalBuildLog('=== Build Started ===');
+    addLocalBuildLog(`Plugin: ${selected}`);
+    addLocalBuildLog(`Build Name: ${buildName || 'Unnamed Build'}`);
+    addLocalBuildLog(`Release Notes: ${releaseNotes || 'No release notes'}`);
+    
+    showBuildNotificationMessage('building', 'Building plugin...');
+    
+    try {
+      // Handle duplicate build name/version
+      const file = await readPlugin(selected);
+      const doc = JSON.parse(file.contents);
+      const meta = doc?.metadata || {};
+      const existing = listBuilds().find((b) => b.pluginId === (meta.id || selected) && b.version === (meta.version || '1.0.0'));
+      
+      if (existing) {
+        const choice = prompt(`A build for ${meta.name || selected} v${meta.version || '1.0.0'} exists. Type 'o' to overwrite or enter a new version to append:`, String(meta.version || '1.0.0'));
+        if (choice === null) return;
+        if (choice.toLowerCase() === 'o') {
+          deleteBuild(existing.key);
+        } else if (choice && choice !== (meta.version || '1.0.0')) {
+          const next = { ...doc, metadata: { ...meta, version: choice } };
+          await persist(next);
+        }
+      }
+
+      // Validate and auto-fix metadata before building
+      addLocalBuildLog('Validating plugin metadata...');
+      addLocalBuildLog(`Plugin ID: ${doc?.metadata?.id || 'undefined'}`);
+      addLocalBuildLog(`Plugin Name: ${doc?.metadata?.name || 'undefined'}`);
+      addLocalBuildLog(`Current route: ${doc?.metadata?.route || 'undefined'}`);
+      addLocalBuildLog(`Current icon: ${doc?.metadata?.icon || 'undefined'}`);
+      
+      const validation = await validatePluginDoc(doc);
+      if (validation.warnings.length > 0) {
+        validation.warnings.forEach(warning => addLocalBuildLog(`WARNING: ${warning}`));
+      }
+      if (validation.errors.length > 0) {
+        validation.errors.forEach(error => addLocalBuildLog(`ERROR: ${error}`));
+        throw new Error(`Plugin validation failed: ${validation.errors.join(', ')}`);
+      }
+      
+      // Re-save the plugin with any auto-fixes applied during validation
+      await persist(doc);
+      addLocalBuildLog(`Route after validation: ${doc?.metadata?.route || 'undefined'}`);
+      addLocalBuildLog(`Icon after validation: ${doc?.metadata?.icon || 'undefined'}`);
+      addLocalBuildLog('Plugin metadata validated and saved');
+      
+      // Debug: Log the full metadata after validation
+      console.log('Full metadata after validation:', JSON.stringify(doc?.metadata, null, 2));
+
+      const r = await runBuild(selected);
+      
+      // Debug: Log the build result
+      console.log('Build result:', r);
+      console.log('Build stdout:', r.stdout);
+      console.log('Build stderr:', r.stderr);
+      
+      // Add build output to logs
+      if (r.stdout) {
+        r.stdout.split('\n').forEach(line => {
+          if (line.trim()) addLocalBuildLog(`STDOUT: ${line}`);
+        });
+      }
+      if (r.stderr) {
+        r.stderr.split('\n').forEach(line => {
+          if (line.trim()) addLocalBuildLog(`STDERR: ${line}`);
+        });
+      }
+      
+      // Add some default logs even if no output
+      if (!r.stdout && !r.stderr) {
+        addLocalBuildLog('Build completed with no output captured');
+        addLocalBuildLog(`Build success: ${r.success}`);
+      }
+      
+      if (!r.success) {
+        console.error('Build failed:', r.stderr || 'Build failed');
+        console.error('Build stdout:', r.stdout || 'No stdout');
+        
+        // Check if this is an ES module error and try to fix it
+        const errorText = r.stderr || '';
+        if (errorText.includes('require is not defined in ES module scope') || 
+            errorText.includes('can use import instead')) {
+          console.log('Detected ES module error, attempting to fix scripts...');
+          showBuildNotificationMessage('building', 'Fixing ES module scripts...');
+          const updateResult = await updatePluginScriptsToESModule(selected);
+          if (updateResult.success) {
+            console.log('Scripts updated successfully, retrying build...');
+            showBuildNotificationMessage('building', 'Scripts updated, retrying build...');
+            // Retry the build
+            const retryResult = await runBuild(selected);
+            if (!retryResult.success) {
+              console.error('Build failed after script update:', retryResult.stderr || 'Build failed');
+              console.error('Retry build stdout:', retryResult.stdout || 'No stdout');
+              showBuildNotificationMessage('error', 'Build failed after script update. Check console for details.');
+              return;
+            }
+            // Continue with successful build
+            console.log('Build succeeded after script update!');
+            console.log('Retry build stdout:', retryResult.stdout || 'No stdout');
+          } else {
+            console.error('Failed to update scripts:', updateResult.error);
+            showBuildNotificationMessage('error', 'Failed to update scripts. Check console for details.');
+            return;
+          }
+        } else if (errorText.includes('Cannot find package') && 
+                   (errorText.includes('vite') || errorText.includes('node_modules'))) {
+          console.log('Detected missing dependencies, installing...');
+          showBuildNotificationMessage('building', 'Installing dependencies...');
+          const installResult = await installDependencies(selected);
+          if (installResult.success) {
+            console.log('Dependencies installed successfully, retrying build...');
+            console.log('Install output:', installResult.stdout || 'No stdout');
+            showBuildNotificationMessage('building', 'Dependencies installed, retrying build...');
+            // Retry the build
+            const retryResult = await runBuild(selected);
+            if (!retryResult.success) {
+              console.error('Build failed after dependency install:', retryResult.stderr || 'Build failed');
+              console.error('Retry build stdout:', retryResult.stdout || 'No stdout');
+              showBuildNotificationMessage('error', 'Build failed after installing dependencies. Check console for details.');
+              return;
+            }
+            // Continue with successful build
+            console.log('Build succeeded after dependency install!');
+            console.log('Retry build stdout:', retryResult.stdout || 'No stdout');
+          } else {
+            console.error('Failed to install dependencies:', installResult.stderr || 'Install failed');
+            console.error('Install stdout:', installResult.stdout || 'No stdout');
+            showBuildNotificationMessage('error', 'Failed to install dependencies. Check console for details.');
+            return;
+          }
+        } else {
+          showBuildNotificationMessage('error', 'Build failed. Check console for details.');
+          return;
+        }
+      }
+      
+      addLocalBuildLog('Exporting built plugin to downloads...');
+      const out = await exportBuiltPluginToDownloads(selected);
+      setLastDownloadPath(out.savedPath);
+      addLocalBuildLog(`Plugin exported to: ${out.savedPath}`);
+      
+      // Validate exported .lycplugin file
+      try {
+        const exportedContent = await readTextFile(out.savedPath);
+        const exportedDoc = JSON.parse(exportedContent);
+        const exportedMeta = exportedDoc?.metadata || {};
+        
+        addLocalBuildLog('=== Exported Plugin Validation ===');
+        addLocalBuildLog(`Exported Plugin ID: ${exportedMeta.id}`);
+        addLocalBuildLog(`Exported Plugin Name: ${exportedMeta.name}`);
+        addLocalBuildLog(`Exported Route: ${exportedMeta.route}`);
+        addLocalBuildLog(`Exported Icon: ${exportedMeta.icon}`);
+        
+        // Check for issues that would cause Centcom problems
+        if (!exportedMeta.route || exportedMeta.route.startsWith('#')) {
+          addLocalBuildLog(`ERROR: Exported plugin has invalid route: ${exportedMeta.route}`);
+        }
+        if (!exportedMeta.icon) {
+          addLocalBuildLog(`WARNING: Exported plugin has no icon`);
+        }
+        if (exportedMeta.route !== `/${exportedMeta.id}`) {
+          addLocalBuildLog(`WARNING: Route (${exportedMeta.route}) doesn't match expected (/${exportedMeta.id})`);
+        }
+        
+        addLocalBuildLog('=== End Exported Plugin Validation ===');
+      } catch (exportValidationError: any) {
+        addLocalBuildLog(`ERROR: Could not validate exported file: ${exportValidationError?.message || String(exportValidationError)}`);
+        console.error('Export validation error:', exportValidationError);
+      }
+      
+      try {
+        const updatedFile = await readPlugin(selected);
+        const updatedDoc = JSON.parse(updatedFile.contents);
+        const m = updatedDoc?.metadata || {};
+        
+        // Create build record with name, release notes, and build logs
+        console.log('Current build logs before saving (React state):', buildLogs);
+        console.log('Current build logs before saving (local array):', currentBuildLogs);
+        const record = {
+          key: makeBuildKey(),
+          path: out.savedPath,
+          pluginId: String(m.id || selected),
+          name: String(m.name || selected),
+          version: String(m.version || '1.0.0'),
+          filename: String(out.savedPath.split('\\').pop() || `${selected}.lycplugin`),
+          builtAt: new Date().toISOString(),
+          icon: m.icon,
+          buildName: buildName || 'Unnamed Build',
+          releaseNotes: releaseNotes || '',
+          buildLogs: [...currentBuildLogs], // Use local build logs array
+        };
+        console.log('Build record being saved:', record);
+        
+        // Add final completion logs to the local array before saving
+        addLocalBuildLog('=== Build Completed Successfully ===');
+        const finalVersion = incrementVersion(m.version || '1.0.0');
+        addLocalBuildLog(`Final version: ${finalVersion}`);
+        addLocalBuildLog(`Build record key: ${record.key}`);
+        
+        // Update the record with all logs including final ones
+        record.buildLogs = [...currentBuildLogs];
+        
+        addBuild(record);
+        
+        // Add to build history in plugin metadata
+        const buildHistory = await getPluginBuildHistory(selected);
+        const newHistoryEntry = {
+          buildName: buildName || 'Unnamed Build',
+          version: m.version || '1.0.0',
+          releaseNotes: releaseNotes || '',
+          builtAt: new Date().toISOString(),
+          buildKey: record.key
+        };
+        
+        // Update plugin with build history
+        const updatedWithHistory = {
+          ...updatedDoc,
+          metadata: {
+            ...m,
+            buildHistory: [...buildHistory, newHistoryEntry]
+          }
+        };
+        
+        await savePlugin(selected, updatedWithHistory);
+        setPluginDoc(updatedWithHistory);
+        setBuilds(listBuilds());
+        
+        // Update version and build history for this specific plugin
+        try {
+          const latestVersion = await getLatestVersion(selected);
+          const latestBuildHistory = await getPluginBuildHistory(selected);
+          setPluginVersionMap(prev => ({ ...prev, [selected]: latestVersion }));
+          setPluginBuildHistoryMap(prev => ({ ...prev, [selected]: latestBuildHistory }));
+        } catch (error) {
+          console.error('Failed to update plugin version info:', error);
+        }
+        
+        refresh();
+        
+        // Auto-increment version for next build (use the same finalVersion)
+        const autoIncrementedDoc = {
+          ...updatedWithHistory,
+          metadata: {
+            ...updatedWithHistory.metadata,
+            version: finalVersion
+          }
+        };
+        await savePlugin(selected, autoIncrementedDoc);
+        setPluginDoc(autoIncrementedDoc);
+        
+        showBuildNotificationMessage('success', `Successfully built ${buildName || 'plugin'}! Version auto-incremented to ${finalVersion}`);
+        setBuildModalOpen(false);
+      } catch (error) {
+        console.error('Failed to save build record:', error);
+        showBuildNotificationMessage('error', 'Build completed but failed to save build record. Check console for details.');
+      }
+    } catch (error) {
+      console.error('Build failed:', error);
+      console.error('Build error details:', error);
+      addLocalBuildLog('=== Build Failed ===');
+      addLocalBuildLog(`Error: ${error}`);
+      showBuildNotificationMessage('error', 'Build failed with unexpected error. Check console for details.');
+    } finally {
+      setBuildStatus('idle');
+    }
   }
 
   const metadata = useMemo(() => pluginDoc?.metadata ?? {}, [pluginDoc]);
@@ -505,6 +896,10 @@ export default function App() {
             <button className={`flex items-center gap-2 w-full text-sm rounded-md px-3 py-2 ${selected === 'builds' ? 'bg-blue-50 text-blue-700 dark:bg-gray-700 dark:text-blue-300' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}`} onClick={() => { setSelected('builds'); }}>
               <ArchiveBoxIcon className="h-5 w-5" />
               <span>Builds</span>
+            </button>
+            <button className={`flex items-center gap-2 w-full text-sm rounded-md px-3 py-2 ${selected === 'centcomDemo' ? 'bg-blue-50 text-blue-700 dark:bg-gray-700 dark:text-blue-300' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}`} onClick={() => { setSelected('centcomDemo'); }}>
+              <KeyIcon className="h-5 w-5" />
+              <span>License Manager Demo</span>
             </button>
           </nav>
         </div>
@@ -644,7 +1039,7 @@ export default function App() {
                               const next={...visiblePluginColumns,[col]:e.target.checked};
                               setVisiblePluginColumns(next); localStorage.setItem('pluginsTableCols', JSON.stringify(next));
                             }} className="rounded border-gray-300 dark:border-gray-600" />
-                            <span className="text-sm capitalize text-gray-700 dark:text-gray-300">{col === 'lastSeen' ? 'Last Seen' : col === 'installedAt' ? 'Installed' : col === 'size' ? 'Size' : col}</span>
+                            <span className="text-sm capitalize text-gray-700 dark:text-gray-300">{col === 'lastSeen' ? 'Last Seen' : col === 'installedAt' ? 'Installed' : col === 'size' ? 'Size' : col === 'version' ? 'Latest Version' : col}</span>
                           </label>
                         ))}
                       </div>
@@ -655,50 +1050,56 @@ export default function App() {
                   </div>
                 </details>
               </div>
-              <div className="overflow-auto">
-                <table className="min-w-full text-sm border-collapse" role="table" aria-label="Plugins">
+              <div className="overflow-x-auto overflow-y-visible">
+                <table className="w-auto text-sm border-collapse" role="table" aria-label="Plugins" style={{ minWidth: 'max-content' }}>
                   <thead>
                     <tr className="text-left text-gray-600 dark:text-gray-300 text-xs uppercase bg-gray-50 dark:bg-gray-900" role="row">
                       {pluginColumnOrder.map((col) => visiblePluginColumns[col] && (
                         <th key={col} style={{ width: (pluginColumnWidths[col] || pluginDefaultWidths[col] || 140) }} className="px-3 py-2 font-semibold border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 relative group">
-                          <div 
-                            className="flex items-center justify-between gap-2 cursor-move select-none"
-                            draggable={col !== 'checkbox'} 
-                            onDragStart={(e)=>{ 
-                              if(col === 'checkbox') return false;
-                              e.dataTransfer.setData('text/col', col); 
-                              e.currentTarget.parentElement?.classList.add('opacity-50');
-                            }} 
-                            onDragEnd={(e)=>{
-                              e.currentTarget.parentElement?.classList.remove('opacity-50');
-                            }}
-                            onDragOver={(e)=>{
-                              e.preventDefault();
-                              e.currentTarget.parentElement?.classList.add('bg-blue-50', 'dark:bg-blue-900');
-                            }}
-                            onDragLeave={(e)=>{
-                              e.currentTarget.parentElement?.classList.remove('bg-blue-50', 'dark:bg-blue-900');
-                            }}
-                            onDrop={(e)=>{ 
-                              e.preventDefault();
-                              e.currentTarget.parentElement?.classList.remove('bg-blue-50', 'dark:bg-blue-900');
-                              const from=e.dataTransfer.getData('text/col'); 
-                              if(!from||from===col||from==='checkbox') return; 
-                              const fromIdx=pluginColumnOrder.indexOf(from); 
-                              const toIdx=pluginColumnOrder.indexOf(col); 
-                              if(fromIdx<0||toIdx<0) return; 
-                              const next=[...pluginColumnOrder]; 
-                              next.splice(toIdx,0,next.splice(fromIdx,1)[0]); 
-                              setPluginColumnOrder(next); 
-                              localStorage.setItem('pluginsTableOrder', JSON.stringify(next)); 
-                            }}
-                          >
-                            {col==='checkbox' ? (
-                              <input ref={pluginsHeaderCheckboxRef} type="checkbox" aria-label="Select all plugins" onChange={(e)=>{ if(e.target.checked){ setSelectedPluginIds(filteredPlugins); } else { setSelectedPluginIds([]); } }} />
-                            ) : (
-                              <span className="capitalize font-medium">{col === 'lastSeen' ? 'Last Seen' : col === 'installedAt' ? 'Installed' : col === 'size' ? 'Size' : col}</span>
-                            )}
-                            <span className="w-1 h-4 cursor-col-resize hover:bg-blue-400 dark:hover:bg-blue-600 rounded" onMouseDown={(e)=>startResizePlugin(col,e)} />
+                          <div className="flex items-center justify-between h-full">
+                            <div 
+                              className="flex items-center justify-center gap-2 cursor-move select-none flex-1"
+                              draggable={col !== 'checkbox'} 
+                              onDragStart={(e)=>{ 
+                                if(col === 'checkbox') return false;
+                                e.dataTransfer.setData('text/col', col); 
+                                e.currentTarget.parentElement?.parentElement?.classList.add('opacity-50');
+                              }} 
+                              onDragEnd={(e)=>{
+                                e.currentTarget.parentElement?.parentElement?.classList.remove('opacity-50');
+                              }}
+                              onDragOver={(e)=>{
+                                e.preventDefault();
+                                e.currentTarget.parentElement?.parentElement?.classList.add('bg-blue-50', 'dark:bg-blue-900');
+                              }}
+                              onDragLeave={(e)=>{
+                                e.currentTarget.parentElement?.parentElement?.classList.remove('bg-blue-50', 'dark:bg-blue-900');
+                              }}
+                              onDrop={(e)=>{ 
+                                e.preventDefault();
+                                e.currentTarget.parentElement?.parentElement?.classList.remove('bg-blue-50', 'dark:bg-blue-900');
+                                const from=e.dataTransfer.getData('text/col'); 
+                                if(!from||from===col||from==='checkbox') return; 
+                                const fromIdx=pluginColumnOrder.indexOf(from); 
+                                const toIdx=pluginColumnOrder.indexOf(col); 
+                                if(fromIdx<0||toIdx<0) return; 
+                                const next=[...pluginColumnOrder]; 
+                                next.splice(toIdx,0,next.splice(fromIdx,1)[0]); 
+                                setPluginColumnOrder(next); 
+                                localStorage.setItem('pluginsTableOrder', JSON.stringify(next)); 
+                              }}
+                            >
+                              {col==='checkbox' ? (
+                                <input ref={pluginsHeaderCheckboxRef} type="checkbox" aria-label="Select all plugins" onChange={(e)=>{ if(e.target.checked){ setSelectedPluginIds(filteredPlugins); } else { setSelectedPluginIds([]); } }} />
+                              ) : (
+                                <span className="capitalize font-medium">{col === 'lastSeen' ? 'Last Seen' : col === 'installedAt' ? 'Installed' : col === 'size' ? 'Size' : col === 'version' ? 'Latest Version' : col}</span>
+                              )}
+                            </div>
+                            <div 
+                              className="w-1 h-full cursor-col-resize hover:bg-blue-500 dark:hover:bg-blue-400 absolute right-0 top-0 opacity-0 hover:opacity-100 transition-opacity duration-200"
+                              onMouseDown={(e)=>startResizePlugin(col,e)}
+                              title="Drag to resize column"
+                            />
                           </div>
                         </th>
                       ))}
@@ -717,7 +1118,7 @@ export default function App() {
                               {col==='checkbox' && (<input type="checkbox" checked={selectedPluginIds.includes(p)} onChange={(e)=>{ if(e.target.checked){ setSelectedPluginIds((prev)=>[...prev,p]); } else { setSelectedPluginIds((prev)=>prev.filter(x=>x!==p)); } }} aria-label={`Select ${meta.name}`} />)}
                               {col==='key' && (<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200" title={`Plugin Key: ${(pluginKeys && pluginKeys[p]) || '-'}`}>{(pluginKeys && pluginKeys[p]) || '-'}</span>)}
                               {col==='open' && (<button className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700" title="Open Plugin" onClick={() => { openPlugin(p); setSelected(p); }}><FolderOpenIcon className="h-4 w-4" /></button>)}
-                              {col==='icon' && (<IconComp className="h-4 w-4 text-gray-700 dark:text-gray-200" title={`Icon: ${meta.icon || 'BeakerIcon'}`} />)}
+                              {col==='icon' && (<div className="flex justify-center"><IconComp className="h-4 w-4 text-gray-700 dark:text-gray-200" title={`Icon: ${meta.icon || 'BeakerIcon'}`} /></div>)}
                               {col==='name' && (
                                 <div className="text-left">
                                   {editingCell?.pluginId === p && editingCell?.column === 'name' ? (
@@ -726,12 +1127,20 @@ export default function App() {
                                       defaultValue={meta.name} 
                                       className="w-full text-sm border-none bg-transparent focus:ring-1 focus:ring-blue-500 rounded px-1" 
                                       autoFocus
-                                      onBlur={() => {
+                                      onBlur={(e) => {
                                         // Save the changes here
+                                        const newName = (e.target as HTMLInputElement).value.trim();
+                                        if (newName && newName !== meta.name) {
+                                          handleUpdatePluginMetadata(p, { name: newName });
+                                        }
                                         setEditingCell(null);
                                       }}
                                       onKeyDown={(e) => {
                                         if (e.key === 'Enter') {
+                                          const newName = (e.target as HTMLInputElement).value.trim();
+                                          if (newName && newName !== meta.name) {
+                                            handleUpdatePluginMetadata(p, { name: newName });
+                                          }
                                           setEditingCell(null);
                                         } else if (e.key === 'Escape') {
                                           setEditingCell(null);
@@ -747,10 +1156,15 @@ export default function App() {
                                 </div>
                               )}
                               {col==='version' && (
-                                <div className="flex flex-col gap-1">
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" title={`Latest Version: ${meta.version}`}>v{meta.version}</span>
-                                  {meta.buildHistory && meta.buildHistory.length > 1 && (
-                                    <span className="text-[10px] text-gray-500 dark:text-gray-400" title={`${meta.buildHistory.length} total builds`}>+{meta.buildHistory.length - 1} builds</span>
+                                <div className="flex flex-col items-center gap-1">
+                                  {meta.version && meta.version !== 'NA' ? (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" title={`Latest Built Version: ${meta.version}`}>
+                                      {meta.version}
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400" title="No builds yet">
+                                      NA
+                                    </span>
                                   )}
                                 </div>
                               )}
@@ -768,12 +1182,24 @@ export default function App() {
                                     className="w-full text-sm border-none bg-transparent focus:ring-1 focus:ring-blue-500 rounded px-1" 
                                     placeholder="Enter tags separated by commas"
                                     autoFocus
-                                    onBlur={() => {
+                                    onBlur={(e) => {
                                       // Save the tags here
+                                      const newTagsString = (e.target as HTMLInputElement).value.trim();
+                                      const newTags = newTagsString.split(',').map((tag: string) => tag.trim()).filter((tag: string) => tag.length > 0);
+                                      const currentTags = meta.tags || [];
+                                      if (JSON.stringify(newTags) !== JSON.stringify(currentTags)) {
+                                        handleUpdatePluginMetadata(p, { tags: newTags });
+                                      }
                                       setEditingCell(null);
                                     }}
                                     onKeyDown={(e) => {
                                       if (e.key === 'Enter') {
+                                        const newTagsString = (e.target as HTMLInputElement).value.trim();
+                                        const newTags = newTagsString.split(',').map((tag: string) => tag.trim()).filter((tag: string) => tag.length > 0);
+                                        const currentTags = meta.tags || [];
+                                        if (JSON.stringify(newTags) !== JSON.stringify(currentTags)) {
+                                          handleUpdatePluginMetadata(p, { tags: newTags });
+                                        }
                                         setEditingCell(null);
                                       } else if (e.key === 'Escape') {
                                         setEditingCell(null);
@@ -862,50 +1288,56 @@ export default function App() {
                   </div>
                 </details>
               </div>
-              <div className="overflow-auto">
-                <table className="min-w-full text-sm border-collapse" role="table" aria-label="Builds">
+              <div className="overflow-x-auto overflow-y-visible">
+                <table className="w-auto text-sm border-collapse" role="table" aria-label="Builds" style={{ minWidth: 'max-content' }}>
                   <thead>
                     <tr className="text-left text-gray-600 dark:text-gray-300 text-xs uppercase bg-gray-50 dark:bg-gray-900" role="row">
                       {buildsColumnOrder.map((col) => visibleBuildsColumns[col] && (
                         <th key={col} style={{ width: (buildsColumnWidths[col] || buildsDefaultWidths[col] || 140) }} className="px-3 py-2 font-semibold border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 relative group">
-                          <div 
-                            className="flex items-center justify-between gap-2 cursor-move select-none"
-                            draggable={col !== 'checkbox'} 
-                            onDragStart={(e)=>{ 
-                              if(col === 'checkbox') return false;
-                              e.dataTransfer.setData('text/col', col); 
-                              e.currentTarget.parentElement?.classList.add('opacity-50');
-                            }} 
-                            onDragEnd={(e)=>{
-                              e.currentTarget.parentElement?.classList.remove('opacity-50');
-                            }}
-                            onDragOver={(e)=>{
-                              e.preventDefault();
-                              e.currentTarget.parentElement?.classList.add('bg-blue-50', 'dark:bg-blue-900');
-                            }}
-                            onDragLeave={(e)=>{
-                              e.currentTarget.parentElement?.classList.remove('bg-blue-50', 'dark:bg-blue-900');
-                            }}
-                            onDrop={(e)=>{ 
-                              e.preventDefault();
-                              e.currentTarget.parentElement?.classList.remove('bg-blue-50', 'dark:bg-blue-900');
-                              const from=e.dataTransfer.getData('text/col'); 
-                              if(!from||from===col||from==='checkbox') return; 
-                              const fromIdx=buildsColumnOrder.indexOf(from); 
-                              const toIdx=buildsColumnOrder.indexOf(col); 
-                              if(fromIdx<0||toIdx<0) return; 
-                              const next=[...buildsColumnOrder]; 
-                              next.splice(toIdx,0,next.splice(fromIdx,1)[0]); 
-                              setBuildsColumnOrder(next); 
-                              localStorage.setItem('buildsTableOrder', JSON.stringify(next)); 
-                            }}
-                          >
-                            {col==='checkbox' ? (
-                              <input ref={buildsHeaderCheckboxRef} type="checkbox" aria-label="Select all builds" onChange={(e)=>{ if(e.target.checked){ setSelectedBuildKeys(filteredBuilds.map(b=>b.key)); } else { setSelectedBuildKeys([]);} }} />
-                            ) : (
-                              <span className="capitalize font-medium">{col === 'name' ? 'Plugin Name' : col === 'built' ? 'Built Date' : col}</span>
-                            )}
-                            <span className="w-1 h-4 cursor-col-resize hover:bg-blue-400 dark:hover:bg-blue-600 rounded" onMouseDown={(e)=>startResizeBuilds(col,e)} />
+                          <div className="flex items-center justify-between h-full">
+                            <div 
+                              className="flex items-center justify-center gap-2 cursor-move select-none flex-1"
+                              draggable={col !== 'checkbox'} 
+                              onDragStart={(e)=>{ 
+                                if(col === 'checkbox') return false;
+                                e.dataTransfer.setData('text/col', col); 
+                                e.currentTarget.parentElement?.parentElement?.classList.add('opacity-50');
+                              }} 
+                              onDragEnd={(e)=>{
+                                e.currentTarget.parentElement?.parentElement?.classList.remove('opacity-50');
+                              }}
+                              onDragOver={(e)=>{
+                                e.preventDefault();
+                                e.currentTarget.parentElement?.parentElement?.classList.add('bg-blue-50', 'dark:bg-blue-900');
+                              }}
+                              onDragLeave={(e)=>{
+                                e.currentTarget.parentElement?.parentElement?.classList.remove('bg-blue-50', 'dark:bg-blue-900');
+                              }}
+                              onDrop={(e)=>{ 
+                                e.preventDefault();
+                                e.currentTarget.parentElement?.parentElement?.classList.remove('bg-blue-50', 'dark:bg-blue-900');
+                                const from=e.dataTransfer.getData('text/col'); 
+                                if(!from||from===col||from==='checkbox') return; 
+                                const fromIdx=buildsColumnOrder.indexOf(from); 
+                                const toIdx=buildsColumnOrder.indexOf(col); 
+                                if(fromIdx<0||toIdx<0) return; 
+                                const next=[...buildsColumnOrder]; 
+                                next.splice(toIdx,0,next.splice(fromIdx,1)[0]); 
+                                setBuildsColumnOrder(next); 
+                                localStorage.setItem('buildsTableOrder', JSON.stringify(next)); 
+                              }}
+                            >
+                              {col==='checkbox' ? (
+                                <input ref={buildsHeaderCheckboxRef} type="checkbox" aria-label="Select all builds" onChange={(e)=>{ if(e.target.checked){ setSelectedBuildKeys(filteredBuilds.map(b=>b.key)); } else { setSelectedBuildKeys([]);} }} />
+                              ) : (
+                                <span className="capitalize font-medium">{col === 'name' ? 'Plugin Name' : col === 'built' ? 'Built Date' : col === 'buildName' ? 'Build Name' : col === 'releaseNotes' ? 'Release Notes' : col === 'buildLogs' ? 'Build Logs' : col}</span>
+                              )}
+                            </div>
+                            <div 
+                              className="w-1 h-full cursor-col-resize hover:bg-blue-500 dark:hover:bg-blue-400 absolute right-0 top-0 opacity-0 hover:opacity-100 transition-opacity duration-200"
+                              onMouseDown={(e)=>startResizeBuilds(col,e)}
+                              title="Drag to resize column"
+                            />
                           </div>
                         </th>
                       ))}
@@ -913,7 +1345,7 @@ export default function App() {
                   </thead>
                   <tbody role="rowgroup" className="divide-y divide-gray-200 dark:divide-gray-700">
                     {filteredBuilds.length === 0 ? (
-                      <tr><td className="px-3 py-4 text-gray-500 dark:text-gray-400" colSpan={8}>No builds yet</td></tr>
+                      <tr><td className="px-3 py-4 text-gray-500 dark:text-gray-400" colSpan={10}>No builds yet</td></tr>
                     ) : filteredBuilds.map((b) => (
                       <tr key={b.key} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 h-10" role="row">
                         {buildsColumnOrder.map((col) => visibleBuildsColumns[col] && (
@@ -923,6 +1355,26 @@ export default function App() {
                             {col==='download' && (<button className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700" title="Download .lycplugin file" onClick={async ()=>{ try { const {copyFileToDownloads} = await import('./lib/studio'); const saved=await copyFileToDownloads(b.path, b.filename); alert(`Saved to ${saved}`); } catch(e) { alert(`Error: ${e}`); } }}><ArrowDownTrayIcon className="h-4 w-4" /></button>)}
                             {col==='name' && (<div className="text-left"><span className="text-gray-900 dark:text-gray-100 truncate block" title={`Plugin: ${b.name}`}>{b.name}</span></div>)}
                             {col==='version' && (<span className="font-mono text-xs text-gray-700 dark:text-gray-200 truncate block" title={`Version: ${b.version}`}>{b.version}</span>)}
+                            {col==='buildName' && (<div className="text-left"><span className="text-gray-900 dark:text-gray-100 truncate block font-medium" title={`Build Name: ${b.buildName || 'Unnamed Build'}`}>{b.buildName || 'Unnamed Build'}</span></div>)}
+                            {col==='releaseNotes' && (<div className="text-left"><span className="text-xs text-gray-600 dark:text-gray-300 truncate block" title={`Release Notes: ${b.releaseNotes || 'No release notes'}`}>{b.releaseNotes || 'No release notes'}</span></div>)}
+                            {col==='buildLogs' && (
+                              <div className="text-center">
+                                {b.buildLogs && b.buildLogs.length > 0 ? (
+                                  <button
+                                    onClick={() => {
+                                      setBuildLogs(b.buildLogs || []);
+                                      setShowBuildLogs(true);
+                                    }}
+                                    className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                                    title={`View ${b.buildLogs.length} log entries`}
+                                  >
+                                    View ({b.buildLogs.length})
+                                  </button>
+                                ) : (
+                                  <span className="text-xs text-gray-400">No logs</span>
+                                )}
+                              </div>
+                            )}
                             {col==='filename' && (<span className="text-gray-700 dark:text-gray-200 truncate block" title={`Filename: ${b.filename}`}>{b.filename}</span>)}
                             {col==='path' && (<span className="text-gray-700 dark:text-gray-200 truncate block" title={`Path: ${b.path}`}>{b.path}</span>)}
                             {col==='built' && (<span className="text-xs text-gray-700 dark:text-gray-200 truncate block" title={`Built: ${new Date(b.builtAt).toLocaleString()}`}>{new Date(b.builtAt).toLocaleDateString()}</span>)}
@@ -1129,12 +1581,15 @@ export default function App() {
               </div>
             </section>
           </div>
+        ) : selected === 'centcomDemo' ? (
+          <CentcomDemo />
         ) : !selected || !pluginDoc ? (
           <div className="h-full grid place-items-center text-gray-500">{busy ? 'Loading…' : 'Select an application or open Settings'}</div>
         ) : (
           <div className="flex flex-col gap-4">
             {/* Minimal plugin header (no borders/containers). Click to edit */}
-            <div className="flex items-center gap-4 select-none mt-10 mb-6">
+            <div className="flex items-center justify-between gap-4 select-none mt-10 mb-6">
+              <div className="flex items-center gap-4">
               {/* Icon display / edit */}
               <div className="relative">
                 {(() => {
@@ -1181,7 +1636,36 @@ export default function App() {
                   }}
                 />
               )}
-      </div>
+              </div>
+              
+              {/* Build Button and Tools */}
+              <div className="flex items-center gap-3">
+                <button
+                  className={`px-6 py-3 text-lg font-semibold rounded-lg transition-colors shadow-md ${
+                    !selected || typeof selected !== 'string' || selected === 'settings' || selected === 'pluginsTool' || selected === 'simulator' || selected === 'builds' || selected === 'centcomDemo' || versionExists(metadata.id || selected, metadata.version || '1.0.0')
+                      ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                      : 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2'
+                  }`}
+                  onClick={() => {
+                    if (!selected || typeof selected !== 'string' || selected === 'settings' || selected === 'pluginsTool' || selected === 'simulator' || selected === 'builds' || selected === 'centcomDemo') {
+                      return;
+                    }
+                    if (versionExists(metadata.id || selected, metadata.version || '1.0.0')) {
+                      showBuildNotificationMessage('error', `Version ${metadata.version || '1.0.0'} already exists. Please update the version number.`);
+                      return;
+                    }
+                    setBuildName('');
+                    setReleaseNotes('');
+                    setBuildModalOpen(true);
+                  }}
+                  disabled={!selected || typeof selected !== 'string' || selected === 'settings' || selected === 'pluginsTool' || selected === 'simulator' || selected === 'builds' || selected === 'centcomDemo' || versionExists(metadata.id || selected, metadata.version || '1.0.0')}
+                  title={versionExists(metadata.id || selected, metadata.version || '1.0.0') ? `Version ${metadata.version || '1.0.0'} already exists` : "Build Plugin"}
+                >
+                  {versionExists(metadata.id || selected, metadata.version || '1.0.0') ? 'Version Exists' : 'Build'}
+                </button>
+
+              </div>
+            </div>
 
             {/* Icon modal */}
             {isEditingIcon && (
@@ -1217,7 +1701,7 @@ export default function App() {
             <div className="border-b border-gray-200 dark:border-gray-700">
               <div className="flex items-center justify-between">
                 <nav className="-mb-px flex gap-4 text-sm">
-                  {(['General','App GUI','App Settings','Sequencer Actions','Licensing'] as const).map((t) => (
+                  {(['General','App GUI','App Settings','Sequencer Actions','Licensing','Build Settings','Test'] as const).map((t) => (
                     <button
                       key={t}
                       className={`px-3 py-2 border-b-2 ${activeTab===t ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:bg-gray-700'}`}
@@ -1227,62 +1711,12 @@ export default function App() {
                     </button>
                   ))}
                 </nav>
-                <div className="py-2">
-                  <button
-                    className="px-3 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700"
-                    onClick={async () => {
-                      if (!selected) return;
-                      // Handle duplicate build name/version
-                      const file = await readPlugin(selected);
-                      const doc = JSON.parse(file.contents);
-                      const meta = doc?.metadata || {};
-                      const existing = listBuilds().find((b) => b.pluginId === (meta.id || selected) && b.version === (meta.version || '1.0.0'));
-                      if (existing) {
-                        const choice = prompt(`A build for ${meta.name || selected} v${meta.version || '1.0.0'} exists. Type 'o' to overwrite or enter a new version to append:`, String(meta.version || '1.0.0'));
-                        if (choice === null) return;
-                        if (choice.toLowerCase() === 'o') {
-                          deleteBuild(existing.key);
-                        } else if (choice && choice !== (meta.version || '1.0.0')) {
-                          const next = { ...doc, metadata: { ...meta, version: choice } };
-                          await persist(next);
-                        }
-                      }
-
-                      const r = await runBuild(selected);
-                      if (!r.success) {
-                        alert(r.stderr || 'Build failed');
-                        return;
-                      }
-                      const out = await exportBuiltPluginToDownloads(selected);
-                      setLastDownloadPath(out.savedPath);
-                      try {
-                        const updatedFile = await readPlugin(selected);
-                        const updatedDoc = JSON.parse(updatedFile.contents);
-                        const m = updatedDoc?.metadata || {};
-                        const record = {
-                          key: makeBuildKey(),
-                          path: out.savedPath,
-                          pluginId: String(m.id || selected),
-                          name: String(m.name || selected),
-                          version: String(m.version || '1.0.0'),
-                          filename: String(out.savedPath.split('\\').pop() || `${selected}.lycplugin`),
-                          builtAt: new Date().toISOString(),
-                          icon: m.icon,
-                        };
-                        addBuild(record);
-                        setBuilds(listBuilds());
-                      } catch {}
-                    }}
-                  >
-                    Build
-                  </button>
-                </div>
               </div>
       </div>
 
             {/* Tab content */}
             {activeTab === 'General' && (
-              <div className="grid grid-cols-[1fr_360px] gap-4">
+              <div className="flex flex-col gap-4">
                 <section className="flex flex-col gap-4">
                   <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-3">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-0">General Settings</h3>
@@ -1323,24 +1757,20 @@ export default function App() {
                       </div>
                     </div>
                   </div>
-                  <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-3">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-0">Versioning</h3>
-                    <VersionEditor
-                      currentVersion={metadata.version || '1.0.0'}
-                      onUpdateVersion={async (v: string) => {
-                        const next = { ...pluginDoc, metadata: { ...metadata, version: v } };
-                        await persist(next);
-                      }}
-                    />
-                  </div>
+
                 </section>
               </div>
             )}
 
             {activeTab === 'App GUI' && (
-              <section className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-0">App GUI Configurator</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300">Design and simulate your application GUI elements here.</p>
+              <section className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden" style={{ height: 'calc(100vh - 200px)' }}>
+                <PluginGUIBuilder
+                  pluginDoc={pluginDoc}
+                  onUpdateGUI={async (guiConfig: any) => {
+                    const next = { ...pluginDoc, gui: guiConfig };
+                    await persist(next);
+                  }}
+                />
               </section>
             )}
 
@@ -1372,14 +1802,145 @@ export default function App() {
             )}
 
             {activeTab === 'Licensing' && (
-              <section className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4 space-y-3">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-0">Licensing</h3>
-                <label className="block text-sm">Create or paste a license key</label>
-                <textarea className="w-full h-24 px-3 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-200" value={pluginDoc?.licensing?.key ?? ''} onChange={async (e) => {
-                  const next = { ...pluginDoc, licensing: { ...(pluginDoc.licensing||{}), key: e.target.value } };
-                  await persist(next);
-                }} />
+              <section className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+                <LicensingPanel
+                  pluginDoc={pluginDoc}
+                  onUpdatePlugin={async (updatedPlugin: any) => {
+                    await persist(updatedPlugin);
+                  }}
+                />
               </section>
+            )}
+
+            {activeTab === 'Build Settings' && (
+              <div className="space-y-4">
+                {/* Versioning Section */}
+                <section className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-0 mb-3">Versioning</h3>
+                  <VersionEditor
+                    currentVersion={metadata.version || '1.0.0'}
+                    onUpdateVersion={async (v: string) => {
+                      const next = { ...pluginDoc, metadata: { ...metadata, version: v } };
+                      await persist(next);
+                    }}
+                  />
+                </section>
+
+                {/* Route Section */}
+                <section className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-0 mb-3">Route Configuration</h3>
+                  <div className="space-y-3">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Plugin Route
+                    </label>
+                    <input
+                      type="text"
+                      value={metadata.route || ''}
+                      onChange={async (e) => {
+                        const next = { ...pluginDoc, metadata: { ...metadata, route: e.target.value } };
+                        await persist(next);
+                      }}
+                      className="w-full px-3 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-200"
+                      placeholder="/api/plugin-route"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Define the API route for this plugin (e.g., /api/data-processor)
+                    </p>
+                  </div>
+                </section>
+
+                {/* Build History Section */}
+                <section className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-0 mb-3">Build History</h3>
+                  <div className="space-y-3">
+                    {(metadata.buildHistory && metadata.buildHistory.length > 0) ? (
+                      <div className="space-y-2">
+                        {metadata.buildHistory.slice().reverse().map((build: any, index: number) => (
+                          <div key={`${build.buildKey || 'build'}-${build.version}-${build.builtAt || index}`} className="border border-gray-200 dark:border-gray-600 rounded-lg p-3 bg-gray-50 dark:bg-gray-900">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                  v{build.version}
+                                </span>
+                                <h4 className="font-medium text-gray-900 dark:text-gray-100">{build.buildName}</h4>
+                              </div>
+                              <span className="text-xs text-gray-500 dark:text-gray-400">
+                                {new Date(build.builtAt).toLocaleDateString()}
+                              </span>
+                            </div>
+                            {build.releaseNotes && (
+                              <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                                {build.releaseNotes}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                        <p className="text-sm">No builds yet</p>
+                        <p className="text-xs mt-1">Use the Build button to create your first build</p>
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                {/* Build Logs Section */}
+                <section className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-0 mb-3">Build Logs</h3>
+                  <div className="space-y-3">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      View and manage build logs for troubleshooting and monitoring build processes.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setShowBuildLogs(true)}
+                        className="px-3 py-2 text-sm bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+                        title="View Build Logs"
+                      >
+                        View Logs
+                      </button>
+                      
+                      <button
+                        onClick={clearBuildLogs}
+                        className="px-3 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                        title="Clear Build Logs"
+                      >
+                        Clear Logs
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            )}
+
+            {activeTab === 'Test' && (
+              <div className="space-y-4">
+                {/* Centcom Integration Testing */}
+                <section className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-0 mb-3">Centcom Integration Testing</h3>
+                  <div className="space-y-3">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Test plugin integration with the Centcom application to ensure proper registration and functionality.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setShowCentcomTest(true)}
+                        className="px-3 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors"
+                        title="Test with Centcom"
+                        disabled={!selected || typeof selected !== 'string' || selected === 'settings' || selected === 'pluginsTool' || selected === 'simulator' || selected === 'builds' || selected === 'centcomDemo'}
+                      >
+                        Test Centcom
+                      </button>
+                    </div>
+                    {(!selected || typeof selected !== 'string' || selected === 'settings' || selected === 'pluginsTool' || selected === 'simulator' || selected === 'builds' || selected === 'centcomDemo') && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                        Please select a plugin first to enable Centcom testing.
+                      </p>
+                    )}
+                  </div>
+                </section>
+              </div>
             )}
 
             {/* Compiler tab removed */}
@@ -1387,6 +1948,154 @@ export default function App() {
         )}
         </div>
       </main>
+
+      {/* Build Status Notification */}
+      {showBuildNotification && (
+        <div className="fixed top-4 right-4 z-50 max-w-sm">
+          <div className={`rounded-lg shadow-lg p-4 border ${
+            buildStatus === 'building' ? 'bg-blue-50 border-blue-200 dark:bg-blue-900 dark:border-blue-700' :
+            buildStatus === 'success' ? 'bg-green-50 border-green-200 dark:bg-green-900 dark:border-green-700' :
+            'bg-red-50 border-red-200 dark:bg-red-900 dark:border-red-700'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                {buildStatus === 'building' && (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 dark:border-blue-400 mr-3"></div>
+                )}
+                {buildStatus === 'success' && (
+                  <svg className="h-4 w-4 text-green-600 dark:text-green-400 mr-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                )}
+                {buildStatus === 'error' && (
+                  <svg className="h-4 w-4 text-red-600 dark:text-red-400 mr-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                )}
+                <p className={`text-sm font-medium ${
+                  buildStatus === 'building' ? 'text-blue-800 dark:text-blue-200' :
+                  buildStatus === 'success' ? 'text-green-800 dark:text-green-200' :
+                  'text-red-800 dark:text-red-200'
+                }`}>
+                  {buildMessage}
+                </p>
+              </div>
+              {buildStatus !== 'building' && (
+                <button
+                  onClick={() => setShowBuildNotification(false)}
+                  className={`ml-4 text-xs ${
+                    buildStatus === 'success' ? 'text-green-600 hover:text-green-800 dark:text-green-400' :
+                    'text-red-600 hover:text-red-800 dark:text-red-400'
+                  }`}
+                >
+                  <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Build Modal */}
+      {buildModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Build Plugin</h3>
+              <button
+                onClick={() => setBuildModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Build Name *
+                </label>
+                <input
+                  type="text"
+                  value={buildName}
+                  onChange={(e) => setBuildName(e.target.value)}
+                  className="w-full px-3 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="e.g., Feature Release, Bug Fix, etc."
+                  autoFocus
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Release Notes
+                </label>
+                <textarea
+                  value={releaseNotes}
+                  onChange={(e) => setReleaseNotes(e.target.value)}
+                  className="w-full px-3 py-2 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Describe what's new in this build..."
+                  rows={4}
+                />
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-200 dark:border-gray-700">
+              <button
+                onClick={() => setBuildModalOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleBuildWithMetadata(buildName, releaseNotes)}
+                disabled={!buildName.trim()}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Build Plugin
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Build Log Viewer Modal */}
+      <BuildLogViewer
+        isOpen={showBuildLogs}
+        onClose={() => setShowBuildLogs(false)}
+        buildLogs={buildLogs}
+        buildStatus={buildStatus}
+      />
+
+      {/* Centcom Test Panel Modal */}
+      {showCentcomTest && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-4/5 h-4/5 flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold">Centcom Integration Test</h2>
+              <button
+                onClick={() => setShowCentcomTest(false)}
+                className="p-2 text-gray-600 hover:text-gray-800 rounded"
+              >
+                ×
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              <CentcomTestPanel
+                pluginName={selected && typeof selected === 'string' ? selected : null}
+                pluginMetadata={selected && typeof selected === 'string' ? pluginDoc : null}
+                onTestResults={(results: any) => {
+                  console.log('Test results:', results);
+                  // You could store these results in state if needed
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

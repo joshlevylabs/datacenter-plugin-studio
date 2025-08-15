@@ -1,0 +1,373 @@
+/* LicenseManager.css */
+
+.license-manager {
+  @apply w-full;
+}
+
+/* Card hover effects */
+.license-card {
+  @apply transition-all duration-200 ease-in-out;
+}
+
+.license-card:hover {
+  @apply shadow-lg transform scale-[1.01];
+}
+
+/* Status indicators */
+.status-valid {
+  @apply bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200;
+}
+
+.status-expired {
+  @apply bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200;
+}
+
+.status-invalid {
+  @apply bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200;
+}
+
+.status-required {
+  @apply bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200;
+}
+
+/* License key display */
+.license-key {
+  @apply font-mono text-xs bg-gray-50 dark:bg-gray-900 rounded-md p-3 break-all border;
+}
+
+.license-key-hidden {
+  letter-spacing: 0.1em;
+}
+
+/* Action buttons */
+.action-button {
+  @apply inline-flex items-center px-3 py-2 border text-sm font-medium rounded-md transition-colors duration-150;
+}
+
+.action-button.primary {
+  @apply border-transparent text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500;
+}
+
+.action-button.secondary {
+  @apply border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500;
+}
+
+.action-button.danger {
+  @apply border-transparent text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500;
+}
+
+.action-button:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+/* Plugin cards */
+.plugin-card {
+  @apply bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 transition-all duration-200;
+}
+
+.plugin-card:hover {
+  @apply shadow-md border-gray-300 dark:border-gray-600;
+}
+
+.plugin-icon {
+  @apply w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center;
+}
+
+/* Summary cards */
+.summary-card {
+  @apply bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 transition-all duration-200;
+}
+
+.summary-card:hover {
+  @apply shadow-md;
+}
+
+.summary-icon {
+  @apply h-8 w-8;
+}
+
+/* Tab navigation */
+.tab-nav {
+  @apply border-b border-gray-200 dark:border-gray-700;
+}
+
+.tab-button {
+  @apply py-2 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 transition-colors duration-150;
+}
+
+.tab-button.active {
+  @apply border-blue-500 text-blue-600 dark:text-blue-400;
+}
+
+.tab-button.inactive {
+  @apply border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300;
+}
+
+/* License tier cards */
+.tier-card {
+  @apply border border-gray-200 dark:border-gray-700 rounded-lg p-3 transition-all duration-150;
+}
+
+.tier-card:hover {
+  @apply border-blue-300 dark:border-blue-600 shadow-sm;
+}
+
+.tier-upgrade-button {
+  @apply w-full inline-flex items-center justify-center px-3 py-1 border border-transparent text-xs font-medium rounded text-blue-600 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:text-blue-300 transition-colors duration-150;
+}
+
+/* Activity timeline */
+.activity-item {
+  @apply flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-b-0;
+}
+
+.activity-icon {
+  @apply h-5 w-5;
+}
+
+.activity-icon.success {
+  @apply text-green-500;
+}
+
+.activity-icon.error {
+  @apply text-red-500;
+}
+
+/* Modal overlay */
+.modal-overlay {
+  @apply fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50;
+}
+
+.modal-content {
+  @apply bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4;
+}
+
+.modal-title {
+  @apply text-lg font-medium text-gray-900 dark:text-white mb-4;
+}
+
+/* Form elements */
+.form-group {
+  @apply mb-4;
+}
+
+.form-label {
+  @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2;
+}
+
+.form-input {
+  @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-200;
+}
+
+.form-textarea {
+  @apply w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-gray-200;
+}
+
+/* Alert styles */
+.alert {
+  @apply mb-6 rounded-lg p-4 border;
+}
+
+.alert.error {
+  @apply bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800;
+}
+
+.alert.success {
+  @apply bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800;
+}
+
+.alert.warning {
+  @apply bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800;
+}
+
+.alert.info {
+  @apply bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800;
+}
+
+.alert-icon {
+  @apply h-5 w-5 mr-2;
+}
+
+.alert-text {
+  @apply text-sm;
+}
+
+.alert.error .alert-text {
+  @apply text-red-800 dark:text-red-200;
+}
+
+.alert.success .alert-text {
+  @apply text-green-800 dark:text-green-200;
+}
+
+.alert.warning .alert-text {
+  @apply text-yellow-800 dark:text-yellow-200;
+}
+
+.alert.info .alert-text {
+  @apply text-blue-800 dark:text-blue-200;
+}
+
+/* Loading states */
+.loading-spinner {
+  @apply animate-spin h-4 w-4;
+}
+
+.loading-overlay {
+  @apply absolute inset-0 bg-white dark:bg-gray-800 bg-opacity-75 flex items-center justify-center rounded-lg;
+}
+
+/* Empty states */
+.empty-state {
+  @apply text-center py-12 text-gray-500 dark:text-gray-400;
+}
+
+.empty-state-icon {
+  @apply h-16 w-16 mx-auto mb-4 opacity-50;
+}
+
+/* Badge styles */
+.badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
+
+.badge.success {
+  @apply bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200;
+}
+
+.badge.warning {
+  @apply bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200;
+}
+
+.badge.error {
+  @apply bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200;
+}
+
+.badge.info {
+  @apply bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200;
+}
+
+.badge.gray {
+  @apply bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .license-manager {
+    @apply px-4;
+  }
+  
+  .plugin-card {
+    @apply p-4;
+  }
+  
+  .summary-card {
+    @apply p-3;
+  }
+  
+  .modal-content {
+    @apply mx-4 p-4;
+  }
+  
+  .tab-nav {
+    @apply overflow-x-auto;
+  }
+  
+  .tab-nav nav {
+    @apply flex-nowrap min-w-max;
+  }
+}
+
+/* Animation utilities */
+.fade-in {
+  animation: fade-in 0.3s ease-in-out;
+}
+
+.slide-up {
+  animation: slide-up 0.3s ease-in-out;
+}
+
+.bounce-in {
+  animation: bounce-in 0.5s ease-in-out;
+}
+
+/* Custom animations */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes bounce-in {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  70% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Focus styles for accessibility */
+.license-manager button:focus,
+.license-manager input:focus,
+.license-manager textarea:focus,
+.license-manager select:focus {
+  @apply outline-none ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-gray-800;
+}
+
+/* High contrast mode support */
+  @media (prefers-contrast: high) {
+    .license-manager {
+      filter: contrast(1.2);
+      border-width: 2px;
+    }
+  
+  .plugin-card,
+  .summary-card {
+    @apply border-2;
+  }
+  
+  .badge {
+    @apply border border-current;
+  }
+}
+
+/* Print styles */
+@media print {
+  .license-manager {
+    @apply text-black bg-white;
+  }
+  
+  .action-button,
+  .tab-nav,
+  .modal-overlay {
+    @apply hidden;
+  }
+  
+  .plugin-card,
+  .summary-card {
+    @apply border border-gray-300 break-inside-avoid;
+  }
+}

@@ -1,0 +1,242 @@
+/* LicensingPanel.css */
+
+.licensing-panel {
+  @apply max-w-6xl mx-auto;
+}
+
+/* Section transitions */
+.licensing-panel .section-content {
+  @apply transition-all duration-200 ease-in-out;
+}
+
+/* Tier card animations */
+.tier-card {
+  @apply transition-all duration-200 ease-in-out;
+}
+
+.tier-card:hover {
+  @apply shadow-md transform scale-[1.01];
+}
+
+/* Feature card styling */
+.feature-card {
+  @apply transition-all duration-150 ease-in-out;
+}
+
+.feature-card:hover {
+  @apply bg-gray-50 dark:bg-gray-700;
+}
+
+/* Input focus enhancements */
+.licensing-panel input:focus,
+.licensing-panel select:focus,
+.licensing-panel textarea:focus {
+  @apply ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-gray-800;
+}
+
+/* Error state styling */
+.input-error {
+  @apply border-red-300 dark:border-red-600;
+}
+
+.input-error:focus {
+  @apply ring-red-500 border-red-500;
+}
+
+/* Success state styling */
+.input-success {
+  @apply border-green-300 dark:border-green-600;
+}
+
+.input-success:focus {
+  @apply ring-green-500 border-green-500;
+}
+
+/* Tab navigation */
+.tab-nav {
+  @apply border-b border-gray-200 dark:border-gray-700;
+}
+
+.tab-button {
+  @apply py-3 px-4 font-medium text-sm transition-colors duration-150;
+}
+
+.tab-button.active {
+  @apply border-b-2 border-blue-500 text-blue-600 dark:text-blue-400;
+}
+
+.tab-button:not(.active) {
+  @apply text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300;
+}
+
+/* Card styling */
+.config-card {
+  @apply bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm;
+}
+
+/* Icon containers */
+.icon-container {
+  @apply inline-flex items-center justify-center w-8 h-8 rounded-full;
+}
+
+.icon-container.primary {
+  @apply bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-400;
+}
+
+.icon-container.success {
+  @apply bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-400;
+}
+
+.icon-container.warning {
+  @apply bg-yellow-100 text-yellow-600 dark:bg-yellow-900 dark:text-yellow-400;
+}
+
+.icon-container.danger {
+  @apply bg-red-100 text-red-600 dark:bg-red-900 dark:text-red-400;
+}
+
+/* Checkbox styling */
+.custom-checkbox {
+  @apply h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded;
+}
+
+/* Toggle switch styling */
+.toggle-switch {
+  @apply relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2;
+}
+
+.toggle-switch.enabled {
+  @apply bg-blue-600;
+}
+
+.toggle-switch.disabled {
+  @apply bg-gray-200 dark:bg-gray-700;
+}
+
+.toggle-switch-thumb {
+  @apply pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out;
+}
+
+.toggle-switch-thumb.enabled {
+  @apply translate-x-5;
+}
+
+.toggle-switch-thumb.disabled {
+  @apply translate-x-0;
+}
+
+/* Button variants */
+.btn-primary {
+  @apply inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-150;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-150;
+}
+
+.btn-danger {
+  @apply inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-150;
+}
+
+.btn-success {
+  @apply inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors duration-150;
+}
+
+/* Empty state styling */
+.empty-state {
+  @apply text-center py-12 text-gray-500 dark:text-gray-400;
+}
+
+.empty-state-icon {
+  @apply h-16 w-16 mx-auto mb-4 opacity-50;
+}
+
+/* Form group spacing */
+.form-group {
+  @apply space-y-1;
+}
+
+.form-group label {
+  @apply block text-sm font-medium text-gray-700 dark:text-gray-300;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  @apply mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500;
+}
+
+/* Help text */
+.help-text {
+  @apply mt-1 text-xs text-gray-500 dark:text-gray-400;
+}
+
+/* Alert styling */
+.alert {
+  @apply rounded-lg p-4 mb-6;
+}
+
+.alert.info {
+  @apply bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800;
+}
+
+.alert.warning {
+  @apply bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800;
+}
+
+.alert.error {
+  @apply bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800;
+}
+
+.alert.success {
+  @apply bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800;
+}
+
+/* Responsive grid adjustments */
+@media (max-width: 768px) {
+  .licensing-panel .grid.md\:grid-cols-2 {
+    @apply grid-cols-1;
+  }
+  
+  .licensing-panel .tab-nav {
+    @apply overflow-x-auto;
+  }
+  
+  .licensing-panel .tab-nav nav {
+    @apply flex-nowrap min-w-max;
+  }
+}
+
+/* Loading states */
+.loading-spinner {
+  @apply animate-spin h-4 w-4 border-2 border-gray-300 border-t-blue-600 rounded-full;
+}
+
+/* Validation indicators */
+.field-valid {
+  @apply border-green-300 dark:border-green-600;
+}
+
+.field-invalid {
+  @apply border-red-300 dark:border-red-600;
+}
+
+/* Smooth animations */
+.slide-in {
+  @apply transform transition-transform duration-300 ease-in-out;
+}
+
+.slide-in.active {
+  @apply translate-x-0;
+}
+
+.slide-in.inactive {
+  @apply translate-x-full;
+}
+
+/* Dark mode specific adjustments */
+@media (prefers-color-scheme: dark) {
+  .licensing-panel {
+    @apply text-gray-100;
+  }
+}
