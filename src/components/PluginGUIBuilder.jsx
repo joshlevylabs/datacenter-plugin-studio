@@ -1653,6 +1653,7 @@ const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
           {viewMode === 'gui' ? (
             /* GUI View: Canvas */
             <>
+          <div>
           {/* Icon-Only Toolbar */}
           <div className="icon-toolbar bg-gray-50 border-b border-gray-300 px-4 py-2">
             <div className="flex items-center justify-center space-x-2">
@@ -1892,7 +1893,6 @@ const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
             </div>
           </div>
         )}
-        </div>
             </>
           ) : (
             /* Code View: Code Editor */
