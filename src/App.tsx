@@ -36,7 +36,7 @@ import LicensingPanel from './components/LicensingPanel.jsx';
 import CentcomDemo from './components/CentcomDemo.jsx';
 import PluginGUIBuilder from './components/PluginGUIBuilder.jsx';
 import BuildLogViewer from './components/BuildLogViewer.jsx';
-import CentcomTestPanel from './components/CentcomTestPanel.jsx';
+import TestPanel from './components/TestPanel.jsx';
 import {
   PuzzlePieceIcon,
   Cog6ToothIcon,
@@ -161,7 +161,7 @@ export default function App() {
   const [showBuildNotification, setShowBuildNotification] = useState(false);
   const [buildLogs, setBuildLogs] = useState<string[]>([]);
   const [showBuildLogs, setShowBuildLogs] = useState(false);
-  const [showCentcomTest, setShowCentcomTest] = useState(false);
+
   const [selectedPluginIds, setSelectedPluginIds] = useState<string[]>([]);
   const pluginsHeaderCheckboxRef = React.useRef<HTMLInputElement | null>(null);
   const pluginMeta = (id: string) => {
@@ -600,7 +600,42 @@ export default function App() {
         throw new Error(`Plugin validation failed: ${validation.errors.join(', ')}`);
       }
       
-      // Re-save the plugin with any auto-fixes applied during validation
+      // Generate frontend code from GUI components if they exist
+      const guiComponents = doc?.gui?.components || [];
+      if (guiComponents.length > 0) {
+        addLocalBuildLog(`Found ${guiComponents.length} GUI components, generating frontend code...`);
+        
+        try {
+          // Always use Simple Generator for safe transpilation
+          const SimpleGuiGeneratorModule = await import('./lib/simpleGuiGenerator.ts');
+          const SimpleGuiGenerator = SimpleGuiGeneratorModule.SimpleGuiGenerator;
+          const { convertToSimpleConfig } = SimpleGuiGeneratorModule;
+          
+          const config = {
+            components: guiComponents,
+            settings: doc?.gui?.settings || { layout: 'tabs', theme: 'default', responsive: true }
+          };
+          
+          // Convert to simple config and generate transpilation-safe code
+          const simpleConfig = convertToSimpleConfig(config);
+          const generatedCode = SimpleGuiGenerator.generateSimpleComponent(simpleConfig, 'PluginGUI');
+          
+          // Update the frontend.main with the generated code
+          if (!doc.frontend) doc.frontend = {};
+          doc.frontend.main = generatedCode;
+          
+          addLocalBuildLog('Generated React component code from GUI design');
+          addLocalBuildLog(`Generated code length: ${generatedCode.length} characters`);
+          
+        } catch (codeGenError: any) {
+          addLocalBuildLog(`WARNING: Failed to generate frontend code: ${codeGenError?.message || String(codeGenError)}`);
+          console.error('Code generation error:', codeGenError);
+        }
+      } else {
+        addLocalBuildLog('No GUI components found, using existing frontend code');
+      }
+      
+      // Re-save the plugin with any auto-fixes applied during validation and generated frontend code
       await persist(doc);
       addLocalBuildLog(`Route after validation: ${doc?.metadata?.route || 'undefined'}`);
       addLocalBuildLog(`Icon after validation: ${doc?.metadata?.icon || 'undefined'}`);
@@ -1915,32 +1950,10 @@ export default function App() {
             )}
 
             {activeTab === 'Test' && (
-              <div className="space-y-4">
-                {/* Centcom Integration Testing */}
-                <section className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm p-4">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-0 mb-3">Centcom Integration Testing</h3>
-                  <div className="space-y-3">
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Test plugin integration with the Centcom application to ensure proper registration and functionality.
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setShowCentcomTest(true)}
-                        className="px-3 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors"
-                        title="Test with Centcom"
-                        disabled={!selected || typeof selected !== 'string' || selected === 'settings' || selected === 'pluginsTool' || selected === 'simulator' || selected === 'builds' || selected === 'centcomDemo'}
-                      >
-                        Test Centcom
-                      </button>
-                    </div>
-                    {(!selected || typeof selected !== 'string' || selected === 'settings' || selected === 'pluginsTool' || selected === 'simulator' || selected === 'builds' || selected === 'centcomDemo') && (
-                      <p className="text-xs text-amber-600 dark:text-amber-400">
-                        Please select a plugin first to enable Centcom testing.
-                      </p>
-                    )}
-                  </div>
-                </section>
-              </div>
+              <TestPanel 
+                pluginDoc={pluginDoc}
+                selected={selected}
+              />
             )}
 
             {/* Compiler tab removed */}
@@ -2070,32 +2083,7 @@ export default function App() {
         buildStatus={buildStatus}
       />
 
-      {/* Centcom Test Panel Modal */}
-      {showCentcomTest && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-4/5 h-4/5 flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold">Centcom Integration Test</h2>
-              <button
-                onClick={() => setShowCentcomTest(false)}
-                className="p-2 text-gray-600 hover:text-gray-800 rounded"
-              >
-                ×
-              </button>
-            </div>
-            <div className="flex-1 overflow-auto p-4">
-              <CentcomTestPanel
-                pluginName={selected && typeof selected === 'string' ? selected : null}
-                pluginMetadata={selected && typeof selected === 'string' ? pluginDoc : null}
-                onTestResults={(results: any) => {
-                  console.log('Test results:', results);
-                  // You could store these results in state if needed
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 }

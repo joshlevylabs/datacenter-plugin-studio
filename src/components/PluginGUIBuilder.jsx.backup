@@ -34,10 +34,8 @@ import {
   Square3Stack3DIcon as SnapIcon,
   ChatBubbleLeftRightIcon,
   PlusCircleIcon,
-  XMarkIcon,
-  PencilIcon,
-  CodeBracketIcon as CodeIcon,
-  RectangleStackIcon as CanvasIcon
+  Square2StackIcon,
+  PencilSquareIcon
 } from '@heroicons/react/24/outline';
 import { AUTOMATION_COMPONENT_LIBRARY, AUTOMATION_CATEGORIES, renderAutomationComponent } from './AutomationComponentLibrary.jsx';
 import { DATA_VISUALIZER_TEMPLATE, DATA_VISUALIZER_COMPONENTS, BASIC_APP_TEMPLATE, BASIC_APP_COMPONENTS } from './DataVisualizerTemplate.jsx';
@@ -110,7 +108,7 @@ const COMPONENT_LIBRARY = {
 const COMPONENT_CATEGORIES = ['All', 'Basic', 'Data Visualization', ...AUTOMATION_CATEGORIES.slice(1)];
 
 const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
-  // Note: guiComponents will be derived from active tab
+  const [guiComponents, setGuiComponents] = useState(pluginDoc?.gui?.components || []);
   const [selectedComponent, setSelectedComponent] = useState(null);
   const [draggedComponent, setDraggedComponent] = useState(null);
   const [previewMode, setPreviewMode] = useState(false);
@@ -145,81 +143,17 @@ const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
   const [isAiChatOpen, setIsAiChatOpen] = useState(false);
   const [clipboardComponent, setClipboardComponent] = useState(null);
   const [showElementsPanel, setShowElementsPanel] = useState(false);
-  
-  // Tab system state
+  const [currentView, setCurrentView] = useState('gui'); // 'gui' or 'code'
+  const [codeContent, setCodeContent] = useState('');
   const [tabs, setTabs] = useState([
-    { id: 'tab-1', name: 'Main', components: pluginDoc?.gui?.components || [] }
+    { id: 'tab1', name: 'Main', components: [] }
   ]);
-  const [activeTabId, setActiveTabId] = useState('tab-1');
-  
-  // Code/GUI view toggle
-  const [viewMode, setViewMode] = useState('gui'); // 'gui' or 'code'
-  const [rawCode, setRawCode] = useState('');
+  const [activeTab, setActiveTab] = useState('tab1');
+  const [appTitle, setAppTitle] = useState('My App');
 
   // Handle adding components from App Genie (add to existing, don't replace)
   const handleComponentsGenerated = (newComponents) => {
-    const currentComponents = getCurrentTabComponents();
-    updateCurrentTabComponents([...currentComponents, ...newComponents]);
-  };
-
-  // Tab management functions
-  const addNewTab = () => {
-    const newTabId = `tab-${Date.now()}`;
-    const newTab = {
-      id: newTabId,
-      name: `Tab ${tabs.length + 1}`,
-      components: []
-    };
-    setTabs(prev => [...prev, newTab]);
-    setActiveTabId(newTabId);
-  };
-
-  const deleteTab = (tabId) => {
-    if (tabs.length <= 1) return; // Don't delete last tab
-    setTabs(prev => prev.filter(tab => tab.id !== tabId));
-    if (activeTabId === tabId) {
-      setActiveTabId(tabs[0].id);
-    }
-  };
-
-  const renameTab = (tabId, newName) => {
-    setTabs(prev => prev.map(tab => 
-      tab.id === tabId ? { ...tab, name: newName } : tab
-    ));
-  };
-
-  const getCurrentTabComponents = () => {
-    const currentTab = tabs.find(tab => tab.id === activeTabId);
-    return currentTab ? currentTab.components : [];
-  };
-
-  const updateCurrentTabComponents = (newComponents) => {
-    setTabs(prev => prev.map(tab => 
-      tab.id === activeTabId ? { ...tab, components: newComponents } : tab
-    ));
-  };
-
-  // Derived state: get components for current active tab
-  const guiComponents = getCurrentTabComponents();
-
-  // Code/GUI view management
-  const switchToCodeView = () => {
-    // Generate code from current tab components
-    const currentComponents = getCurrentTabComponents();
-    const config = convertToSimpleConfig({ components: currentComponents, settings: guiSettings });
-    const generatedCode = SimpleGuiGenerator.generateSimpleComponent(config, 'PluginGUI');
-    setRawCode(generatedCode);
-    setViewMode('code');
-  };
-
-  const switchToGUIView = () => {
-    // Parse code back to components (basic implementation)
-    setViewMode('gui');
-  };
-
-  const updateRawCode = (newCode) => {
-    setRawCode(newCode);
-    // TODO: Parse code back to components when switching back to GUI view
+    setGuiComponents(prev => [...prev, ...newComponents]);
   };
 
   // Handle keyboard shortcuts and dropdown closing
@@ -388,7 +322,7 @@ const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
     };
 
     console.log('Creating new component:', newComponent);
-    updateCurrentTabComponents([...getCurrentTabComponents(), newComponent]);
+    setGuiComponents(prev => [...prev, newComponent]);
     setSelectedComponent(newComponent.id);
     setDraggedComponent(null);
   }, []);
@@ -574,7 +508,7 @@ const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
 
   // Delete selected component
   const deleteComponent = (componentId) => {
-    updateCurrentTabComponents(getCurrentTabComponents().filter(comp => comp.id !== componentId));
+    setGuiComponents(prev => prev.filter(comp => comp.id !== componentId));
     if (selectedComponent === componentId) {
       setSelectedComponent(null);
     }
@@ -583,7 +517,7 @@ const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
   // Layer management functions
   const moveToFront = (componentId) => {
     const maxZ = Math.max(...guiComponents.map(c => c.zIndex || 0));
-    updateCurrentTabComponents(getCurrentTabComponents().map(comp => 
+    setGuiComponents(prev => prev.map(comp => 
       comp.id === componentId 
         ? { ...comp, zIndex: maxZ + 1 }
         : comp
@@ -592,7 +526,7 @@ const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
 
   const moveToBack = (componentId) => {
     const minZ = Math.min(...guiComponents.map(c => c.zIndex || 0));
-    updateCurrentTabComponents(getCurrentTabComponents().map(comp => 
+    setGuiComponents(prev => prev.map(comp => 
       comp.id === componentId 
         ? { ...comp, zIndex: Math.max(0, minZ - 1) }
         : comp
@@ -607,7 +541,7 @@ const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
     const nextZ = Math.min(...guiComponents.filter(c => (c.zIndex || 0) > currentZ).map(c => c.zIndex || 0));
     
     if (nextZ !== Infinity) {
-      updateCurrentTabComponents(getCurrentTabComponents().map(comp => {
+      setGuiComponents(prev => prev.map(comp => {
         if (comp.id === componentId) {
           return { ...comp, zIndex: nextZ + 0.1 };
         } else if (comp.zIndex === nextZ) {
@@ -626,7 +560,7 @@ const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
     const prevZ = Math.max(...guiComponents.filter(c => (c.zIndex || 0) < currentZ).map(c => c.zIndex || 0));
     
     if (prevZ !== -Infinity && prevZ >= 0) {
-      updateCurrentTabComponents(getCurrentTabComponents().map(comp => {
+      setGuiComponents(prev => prev.map(comp => {
         if (comp.id === componentId) {
           return { ...comp, zIndex: prevZ - 0.1 };
         } else if (comp.zIndex === prevZ) {
@@ -660,7 +594,7 @@ const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
       zIndex: maxZ + 1
     };
     
-    updateCurrentTabComponents([...getCurrentTabComponents(), newComponent]);
+    setGuiComponents(prev => [...prev, newComponent]);
     setSelectedComponent(newComponent.id);
     console.log('Component pasted:', newComponent.type);
   };
@@ -678,7 +612,7 @@ const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
       zIndex: maxZ + 1
     };
     
-    updateCurrentTabComponents([...getCurrentTabComponents(), newComponent]);
+    setGuiComponents(prev => [...prev, newComponent]);
     setSelectedComponent(newComponent.id);
     setSidebarTab('properties'); // Auto-open properties for new element
     setShowElementsPanel(false); // Close elements panel
@@ -717,23 +651,109 @@ const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
     return sizes[type] || { width: 100, height: 40 };
   };
 
+  // Tab management functions
+  const addTab = () => {
+    const newTabId = `tab${Date.now()}`;
+    const newTab = {
+      id: newTabId,
+      name: `Tab ${tabs.length + 1}`,
+      components: []
+    };
+    setTabs(prev => [...prev, newTab]);
+    setActiveTab(newTabId);
+  };
+
+  const removeTab = (tabId) => {
+    if (tabs.length <= 1) return; // Keep at least one tab
+    setTabs(prev => prev.filter(tab => tab.id !== tabId));
+    if (activeTab === tabId) {
+      setActiveTab(tabs[0].id);
+    }
+  };
+
+  const updateTabName = (tabId, newName) => {
+    setTabs(prev => prev.map(tab => 
+      tab.id === tabId ? { ...tab, name: newName } : tab
+    ));
+  };
+
+  // View switching functions
+  const switchToCodeView = () => {
+    // Generate code from current GUI state
+    const config = convertToSimpleConfig({
+      components: guiComponents,
+      settings: guiSettings
+    });
+    const generatedCode = SimpleGuiGenerator.generateSimpleComponent(config, 'PluginGUI');
+    setCodeContent(generatedCode);
+    setCurrentView('code');
+  };
+
+  const switchToGuiView = () => {
+    // Try to parse code back to GUI components
+    try {
+      const parsedComponents = parseCodeToComponents(codeContent);
+      if (parsedComponents && parsedComponents.length > 0) {
+        setGuiComponents(parsedComponents);
+      }
+    } catch (error) {
+      console.warn('Could not parse code back to GUI:', error);
+      // Keep existing components if parsing fails
+    }
+    setCurrentView('gui');
+  };
+
+  // Basic code parsing function (simplified)
+  const parseCodeToComponents = (code) => {
+    // This is a simplified parser - in a real implementation you'd want a proper AST parser
+    const components = [];
+    
+    // Look for React.createElement calls and extract basic info
+    const createElementRegex = /React\.createElement\('(\w+)',\s*({[^}]*}),?\s*(?:'([^']*)'|\d+|null)?\)/g;
+    let match;
+    let componentId = 1;
+    
+    while ((match = createElementRegex.exec(code)) !== null) {
+      const [, elementType, propsString, textContent] = match;
+      
+      try {
+        // Parse props (basic JSON-like parsing)
+        const props = propsString ? JSON.parse(propsString.replace(/(\w+):/g, '"$1":')) : {};
+        
+        components.push({
+          id: `parsed-component-${componentId++}`,
+          type: elementType,
+          text: textContent || props.children || `${elementType} element`,
+          props: props,
+          position: { x: componentId * 50, y: componentId * 50 },
+          size: getSizeForType(elementType),
+          zIndex: componentId
+        });
+      } catch (parseError) {
+        console.warn('Could not parse component props:', parseError);
+      }
+    }
+    
+    return components;
+  };
+
   // Update component properties
   const updateComponentProps = (componentId, newProps) => {
-    updateCurrentTabComponents(getCurrentTabComponents().map(comp => 
+    setGuiComponents(prev => prev.map(comp => 
       comp.id === componentId ? { ...comp, props: { ...comp.props, ...newProps } } : comp
     ));
   };
 
   // Move component
   const moveComponent = (componentId, newPosition) => {
-    updateCurrentTabComponents(getCurrentTabComponents().map(comp => 
+    setGuiComponents(prev => prev.map(comp => 
       comp.id === componentId ? { ...comp, position: newPosition } : comp
     ));
   };
 
   // Resize component
   const resizeComponent = (componentId, newSize) => {
-    updateCurrentTabComponents(getCurrentTabComponents().map(comp => 
+    setGuiComponents(prev => prev.map(comp => 
       comp.id === componentId ? { ...comp, size: newSize } : comp
     ));
   };
@@ -819,7 +839,7 @@ const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
     const template = DATA_VISUALIZER_TEMPLATE;
     
     // Clear existing components and apply template
-    updateCurrentTabComponents(template.components);
+    setGuiComponents(template.components);
     setGuiSettings(template.settings);
     setSelectedComponent(null);
     
@@ -836,7 +856,7 @@ const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
     const template = BASIC_APP_TEMPLATE;
     
     // Clear existing components and apply template
-    updateCurrentTabComponents(template.components);
+    setGuiComponents(template.components);
     setGuiSettings(template.settings);
     setSelectedComponent(null);
     
@@ -851,7 +871,7 @@ const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
   // Clear all components
   const clearAllComponents = () => {
     if (window.confirm('Are you sure you want to clear all components? This action cannot be undone.')) {
-      updateCurrentTabComponents([]);
+      setGuiComponents([]);
       setSelectedComponent(null);
       saveGUI();
     }
@@ -1421,28 +1441,6 @@ const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
                  <div className="flex justify-between items-center">
            <div className="flex items-center space-x-4">
              <h3 className="text-lg font-semibold">🎨 App Studio</h3>
-             
-             {/* View Mode Toggle */}
-             <div className="flex items-center bg-gray-100 rounded-lg p-1">
-               <button
-                 onClick={() => setViewMode('gui')}
-                 className={`flex items-center space-x-1 px-3 py-1 rounded text-sm transition-colors ${
-                   viewMode === 'gui' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                 }`}
-               >
-                 <CanvasIcon className="w-4 h-4" />
-                 <span>GUI</span>
-               </button>
-               <button
-                 onClick={switchToCodeView}
-                 className={`flex items-center space-x-1 px-3 py-1 rounded text-sm transition-colors ${
-                   viewMode === 'code' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                 }`}
-               >
-                 <CodeIcon className="w-4 h-4" />
-                 <span>Code</span>
-               </button>
-             </div>
            </div>
           
           <div className="flex space-x-2">
@@ -1462,54 +1460,6 @@ const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
           </div>
         </div>
 
-      </div>
-
-      {/* Tab System */}
-      <div className="tab-system border-b border-gray-200 bg-gray-50">
-        <div className="flex items-center justify-between px-4 py-2">
-          <div className="flex items-center space-x-1">
-            {tabs.map((tab) => (
-              <div key={tab.id} className="relative group">
-                <button
-                  onClick={() => setActiveTabId(tab.id)}
-                  className={`flex items-center space-x-2 px-3 py-2 rounded-t-lg text-sm transition-colors ${
-                    activeTabId === tab.id
-                      ? 'bg-white text-gray-900 border-l border-r border-t border-gray-200'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
-                >
-                  <span>{tab.name}</span>
-                  <span className="text-xs text-gray-400">({tab.components.length})</span>
-                  {tabs.length > 1 && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteTab(tab.id);
-                      }}
-                      className="ml-1 p-1 hover:bg-gray-200 rounded"
-                    >
-                      <XMarkIcon className="w-3 h-3" />
-                    </button>
-                  )}
-                </button>
-              </div>
-            ))}
-            <button
-              onClick={addNewTab}
-              className="flex items-center space-x-1 px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded text-sm"
-            >
-              <PlusIcon className="w-4 h-4" />
-              <span>Add Tab</span>
-            </button>
-          </div>
-          
-          {/* Tab Actions */}
-          <div className="flex items-center space-x-2">
-            <span className="text-xs text-gray-500">
-              Active: {tabs.find(t => t.id === activeTabId)?.name}
-            </span>
-          </div>
-        </div>
       </div>
 
       {/* Split Layout: Properties (left) + Canvas (center) + App Genie (right) */}
@@ -1647,12 +1597,8 @@ const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
           </div>
         )}
 
-        {/* Center: Interactive Canvas or Code Editor */}
+        {/* Center: Interactive Canvas */}
         <div className={`canvas-section ${isAppGenieMinimized ? 'expanded' : ''}`}>
-          
-          {viewMode === 'gui' ? (
-            /* GUI View: Canvas */
-            <>
           {/* Icon-Only Toolbar */}
           <div className="icon-toolbar bg-gray-50 border-b border-gray-300 px-4 py-2">
             <div className="flex items-center justify-center space-x-2">
@@ -1768,6 +1714,36 @@ const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
 
               <div className="w-px h-6 bg-gray-300"></div>
 
+              {/* View Toggle */}
+              <div className="flex items-center bg-white border border-gray-300 rounded overflow-hidden">
+                <button
+                  onClick={() => currentView === 'gui' ? switchToCodeView() : setCurrentView('gui')}
+                  className={`flex items-center space-x-1 px-3 py-2 text-sm transition-colors ${
+                    currentView === 'gui' 
+                      ? 'bg-blue-100 text-blue-700 border-r border-blue-200' 
+                      : 'hover:bg-gray-50 text-gray-600 border-r border-gray-200'
+                  }`}
+                  title="GUI Editor View"
+                >
+                  <Square2StackIcon className="w-4 h-4" />
+                  <span>GUI</span>
+                </button>
+                <button
+                  onClick={() => currentView === 'code' ? switchToGuiView() : switchToCodeView()}
+                  className={`flex items-center space-x-1 px-3 py-2 text-sm transition-colors ${
+                    currentView === 'code' 
+                      ? 'bg-blue-100 text-blue-700' 
+                      : 'hover:bg-gray-50 text-gray-600'
+                  }`}
+                  title="Code Editor View"
+                >
+                  <PencilSquareIcon className="w-4 h-4" />
+                  <span>Code</span>
+                </button>
+              </div>
+
+              <div className="w-px h-6 bg-gray-300"></div>
+
               {/* Snaps Tool with Dropdown */}
               <div className="relative">
                 <button
@@ -1819,8 +1795,75 @@ const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
             </div>
           </div>
 
-          {/* Interactive Canvas */}
-          <div className={`canvas-container flex-1 overflow-auto ${canvasTheme === 'dark' ? 'bg-gray-900' : 'bg-gray-50'}`}>
+        {/* Main Layout Container */}
+        <div className="flex flex-1">
+          {/* App Content Area */}
+          <div className="app-content-area flex-1 flex flex-col">
+            
+            {currentView === 'gui' ? (
+              <>
+                {/* Title Section */}
+                <div className="title-section bg-white border-b border-gray-200 p-4">
+                  <div className="flex items-center justify-between">
+                    <input
+                      type="text"
+                      value={appTitle}
+                      onChange={(e) => setAppTitle(e.target.value)}
+                      className="text-2xl font-bold text-gray-800 bg-transparent border-none outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 py-1"
+                      placeholder="App Title"
+                    />
+                    <div className="flex items-center space-x-2 text-sm text-gray-500">
+                      <span>{guiComponents.length} elements</span>
+                      <span>•</span>
+                      <span>{tabs.length} tabs</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tab Bar */}
+                <div className="tab-bar bg-gray-50 border-b border-gray-200">
+                  <div className="flex items-center">
+                    {tabs.map((tab) => (
+                      <div key={tab.id} className="flex items-center">
+                        <button
+                          onClick={() => setActiveTab(tab.id)}
+                          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                            activeTab === tab.id
+                              ? 'border-blue-500 text-blue-600 bg-white'
+                              : 'border-transparent text-gray-600 hover:text-gray-800 hover:border-gray-300'
+                          }`}
+                        >
+                          <input
+                            type="text"
+                            value={tab.name}
+                            onChange={(e) => updateTabName(tab.id, e.target.value)}
+                            className="bg-transparent border-none outline-none w-20"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </button>
+                        {tabs.length > 1 && (
+                          <button
+                            onClick={() => removeTab(tab.id)}
+                            className="ml-1 p-1 text-gray-400 hover:text-red-500"
+                            title="Remove Tab"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      onClick={addTab}
+                      className="ml-2 px-3 py-1 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded"
+                      title="Add Tab"
+                    >
+                      + Tab
+                    </button>
+                  </div>
+                </div>
+
+                {/* Interactive Canvas */}
+                <div className={`canvas-container flex-1 overflow-auto ${canvasTheme === 'dark' ? 'bg-gray-900' : 'bg-gray-50'}`}>
             <div
               ref={canvasRef}
               className={`gui-canvas ${dragOverCanvas ? 'drag-over' : ''} ${previewMode ? 'preview-mode' : ''} theme-${canvasTheme}`}
@@ -1863,8 +1906,36 @@ const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
                 </React.Fragment>
               ))}
             </div>
+              </>
+            ) : (
+              /* Code View */
+              <div className="code-view flex-1 flex flex-col">
+                <div className="code-header bg-white border-b border-gray-200 p-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-xl font-bold text-gray-800">Code Editor</h2>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm text-gray-600">Edit the code directly</span>
+                      <button
+                        onClick={switchToGuiView}
+                        className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm"
+                      >
+                        Apply Changes
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="code-editor-container flex-1 p-4">
+                  <textarea
+                    value={codeContent}
+                    onChange={(e) => setCodeContent(e.target.value)}
+                    className="w-full h-full font-mono text-sm border border-gray-300 rounded p-4 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="// Your component code will appear here..."
+                    style={{ minHeight: '500px' }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
-        </div>
 
         {/* AI Chat Container - Separate from App Genie */}
         {isAiChatOpen && (
@@ -1892,36 +1963,6 @@ const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
             </div>
           </div>
         )}
-        </div>
-            </>
-          ) : (
-            /* Code View: Code Editor */
-            <div className="code-editor-container flex-1 flex flex-col">
-              <div className="code-editor-header bg-gray-800 text-white p-3 flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <CodeIcon className="w-5 h-5" />
-                  <span className="font-medium">Raw Code Editor</span>
-                  <span className="text-xs text-gray-400">({tabs.find(t => t.id === activeTabId)?.name})</span>
-                </div>
-                <button
-                  onClick={switchToGUIView}
-                  className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition-colors"
-                >
-                  Switch to GUI
-                </button>
-              </div>
-              <div className="flex-1 relative">
-                <textarea
-                  value={rawCode}
-                  onChange={(e) => updateRawCode(e.target.value)}
-                  className="w-full h-full p-4 font-mono text-sm bg-gray-900 text-green-400 border-0 resize-none focus:outline-none"
-                  placeholder="// Your plugin code will appear here when switching from GUI view..."
-                  style={{ minHeight: '400px' }}
-                />
-              </div>
-            </div>
-          )}
-        </div>
 
         {/* Right Side: App Genie Sidebar (simplified without chat) */}
         <div className={`app-genie-sidebar ${isAppGenieMinimized ? 'minimized' : ''}`}>
@@ -1933,6 +1974,7 @@ const PluginGUIBuilder = ({ pluginDoc, onUpdateGUI }) => {
             currentComponents={guiComponents}
             onMinimizeChange={setIsAppGenieMinimized}
           />
+        </div>
         </div>
       </div>
 

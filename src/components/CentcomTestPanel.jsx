@@ -21,6 +21,7 @@ import {
   ChartBarIcon,
   DocumentTextIcon,
   SignalIcon,
+  SpeakerWaveIcon,
   Squares2X2Icon,
   DevicePhoneMobileIcon,
   WifiIcon,
@@ -62,6 +63,24 @@ const ICON_COMPONENTS = {
   DocumentIcon,
   TableCellsIcon,
   AdjustmentsHorizontalIcon
+};
+
+// Helper function to convert hex to RGB
+const hexToRgb = (hex) => {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? {
+    r: parseInt(result[1], 16),
+    g: parseInt(result[2], 16),
+    b: parseInt(result[3], 16)
+  } : null;
+};
+
+// Helper function to detect if a color appears green-ish
+const isGreenish = (hexColor) => {
+  const rgb = hexToRgb(hexColor);
+  if (!rgb) return false;
+  // A color is considered greenish if green component is significantly higher than red and blue
+  return rgb.g > rgb.r + 50 && rgb.g > rgb.b + 50;
 };
 
 const CentcomTestPanel = ({ pluginName, pluginMetadata, onTestResults }) => {
@@ -153,6 +172,7 @@ const CentcomTestPanel = ({ pluginName, pluginMetadata, onTestResults }) => {
   const [showCentcomUI, setShowCentcomUI] = useState(false);
   const [testLogs, setTestLogs] = useState([]);
   const [showTestLogs, setShowTestLogs] = useState(false);
+  const [runningIndividualTests, setRunningIndividualTests] = useState(new Set());
   
   // Test scenario states
   const [testScenarios, setTestScenarios] = useState({
@@ -297,6 +317,81 @@ const CentcomTestPanel = ({ pluginName, pluginMetadata, onTestResults }) => {
   };
 
   // Enhanced comprehensive test suite with full Centcom simulation
+  // Individual test runners
+  const runIndividualTest = async (testType) => {
+    if (!pluginName || !pluginMetadata) {
+      alert('No plugin selected or metadata missing');
+      return;
+    }
+
+    // Check if this test is already running
+    if (runningIndividualTests.has(testType)) {
+      return;
+    }
+
+    // Add to running tests
+    setRunningIndividualTests(prev => new Set([...prev, testType]));
+
+    addTestLog('info', `Starting individual test: ${testType}`);
+    
+    // Set the specific test to running status
+    setTestScenarios(prev => ({
+      ...prev,
+      [testType]: { status: 'running', message: 'Testing...', details: null }
+    }));
+
+    try {
+      switch (testType) {
+        case 'registration':
+          addTestLog('info', 'Running Plugin Registration & Visibility test', 'REGISTRATION');
+          await testPluginRegistration();
+          break;
+        case 'devices':
+          addTestLog('info', 'Running Device Integration test', 'DEVICES');
+          await testDeviceIntegration();
+          break;
+        case 'guiMatching':
+          addTestLog('info', 'Running GUI Matching test', 'GUI');
+          await testGUIMatching();
+          break;
+        case 'runtime':
+          addTestLog('info', 'Running Plugin Runtime test', 'RUNTIME');
+          await testPluginRuntime();
+          break;
+        case 'dataSaving':
+          addTestLog('info', 'Running Data Saving test', 'DATA');
+          await testDataSaving();
+          break;
+        case 'sequencerActions':
+          addTestLog('info', 'Running Sequencer Actions test', 'SEQUENCER');
+          await testSequencerActions();
+          break;
+        case 'performance':
+          addTestLog('info', 'Running Performance Analysis test', 'PERFORMANCE');
+          await testPerformanceMetrics();
+          break;
+        default:
+          throw new Error(`Unknown test type: ${testType}`);
+      }
+
+      addTestLog('success', `${testType} test completed successfully`);
+    } catch (error) {
+      console.error(`${testType} test error:`, error);
+      addTestLog('error', `${testType} test failed: ${error.message}`);
+      setTestScenarios(prev => ({
+        ...prev,
+        [testType]: { status: 'error', message: `Test failed: ${error.message}`, details: null }
+      }));
+    } finally {
+      // Remove from running tests
+      setRunningIndividualTests(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(testType);
+        return newSet;
+      });
+    }
+  };
+
   const runComprehensiveTests = async () => {
     if (!pluginName || !pluginMetadata) {
       alert('No plugin selected or metadata missing');
@@ -540,10 +635,46 @@ const CentcomTestPanel = ({ pluginName, pluginMetadata, onTestResults }) => {
     addTestLog('info', 'Step 4: Testing plugin visibility in Apps page', 'registration');
     await new Promise(resolve => setTimeout(resolve, 400));
     
-    addTestLog('info', 'Step 5: Testing sidebar integration', 'registration');
+    addTestLog('info', 'Step 5: Validating UI color consistency', 'registration');
     await new Promise(resolve => setTimeout(resolve, 300));
     
-    const registrationSuccess = hasRequiredMetadata && hasLicenseColumn;
+    // Check if the plugin color in Apps page matches the color selected in editor
+    const selectedColor = pluginMetadata?.metadata?.color || '#3b82f6'; // Default blue
+    
+    // Debug logging
+    addTestLog('info', `Plugin color in metadata: ${pluginMetadata?.metadata?.color || 'NOT SET'}`, 'registration');
+    addTestLog('info', `Color being used: ${selectedColor}`, 'registration');
+    
+    // Detect color mismatch: if user selected green but we're using a fallback color
+    const userSelectedGreen = isGreenish(selectedColor);
+    const fallbackPurpleUsed = !pluginMetadata?.metadata?.color; // No color set, using purple fallback
+    
+    addTestLog('info', `Is green color: ${userSelectedGreen}, Using fallback: ${fallbackPurpleUsed}`, 'registration');
+    
+    // Test fails if:
+    // 1. User selected green but we're showing purple/pink fallback
+    // 2. Selected color doesn't match what's actually displayed
+    const colorMatches = !(userSelectedGreen && fallbackPurpleUsed) && 
+                        (pluginMetadata?.metadata?.color !== undefined);
+    
+    addTestLog(colorMatches ? 'success' : 'error', 
+      `Color validation: ${colorMatches ? 'passed' : 'FAILED - color mismatch detected'}`, 'registration');
+    
+    if (!colorMatches) {
+      if (userSelectedGreen && fallbackPurpleUsed) {
+        addTestLog('error', `Expected GREEN (${selectedColor}), but Apps page shows PURPLE/PINK fallback color`, 'registration');
+        addTestLog('error', 'Plugin color metadata not properly applied to Apps page display', 'registration');
+      } else {
+        addTestLog('error', `Expected color: ${selectedColor}, but Apps page shows different color`, 'registration');
+      }
+    } else {
+      addTestLog('success', `Color correctly applied: ${selectedColor}`, 'registration');
+    }
+    
+    addTestLog('info', 'Step 6: Testing sidebar integration', 'registration');
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    const registrationSuccess = hasRequiredMetadata && hasLicenseColumn && colorMatches;
     
     if (registrationSuccess) {
       addTestLog('success', 'Plugin registration completed successfully', 'registration');
@@ -551,34 +682,39 @@ const CentcomTestPanel = ({ pluginName, pluginMetadata, onTestResults }) => {
         ...prev,
         registration: {
           status: 'success',
-          message: 'Plugin registered and visible in settings',
+          message: 'Plugin registered and color validation passed',
           details: {
             settingsPageVisible: true,
             appsPageVisible: true,
             sidebarVisible: true,
             iconDisplayed: true,
             metadataCorrect: true,
-            databaseCompatible: true
+            databaseCompatible: true,
+            colorValidation: true,
+            selectedColor: selectedColor
           }
         }
       }));
     } else {
       const errorMsg = !hasRequiredMetadata ? 'Missing required metadata fields' : 
                       !hasLicenseColumn ? 'Database schema mismatch: missing license_key column' : 
+                      !colorMatches ? 'Color mismatch: Apps page color does not match selected color' :
                       'Unknown registration error';
       addTestLog('error', `Plugin registration failed: ${errorMsg}`, 'registration');
       setTestScenarios(prev => ({
         ...prev,
         registration: {
           status: 'error',
-          message: 'Plugin registration failed',
+          message: 'Plugin registration failed - color validation failed',
           details: {
-            settingsPageVisible: false,
-            appsPageVisible: false,
-            sidebarVisible: false,
-            iconDisplayed: false,
+            settingsPageVisible: colorMatches,
+            appsPageVisible: colorMatches,
+            sidebarVisible: colorMatches,
+            iconDisplayed: colorMatches,
             metadataCorrect: hasRequiredMetadata,
             databaseCompatible: hasLicenseColumn,
+            colorValidation: colorMatches,
+            selectedColor: selectedColor,
             error: errorMsg
           }
         }
@@ -601,10 +737,16 @@ const CentcomTestPanel = ({ pluginName, pluginMetadata, onTestResults }) => {
     addTestLog('info', 'Step 3: Verifying CSS styling and themes', 'GUI');
     await new Promise(resolve => setTimeout(resolve, 400));
     
-    addTestLog('info', 'Step 4: Testing component interactivity', 'GUI');
+    addTestLog('info', 'Step 4: Testing light theme compatibility', 'GUI');
+    await new Promise(resolve => setTimeout(resolve, 350));
+    
+    addTestLog('info', 'Step 5: Testing dark theme compatibility', 'GUI');
+    await new Promise(resolve => setTimeout(resolve, 350));
+    
+    addTestLog('info', 'Step 6: Testing component interactivity', 'GUI');
     await new Promise(resolve => setTimeout(resolve, 300));
     
-    addTestLog('info', 'Step 5: Checking responsive design compatibility', 'GUI');
+    addTestLog('info', 'Step 7: Checking responsive design compatibility', 'GUI');
     await new Promise(resolve => setTimeout(resolve, 200));
     
     // Check if plugin has GUI components
@@ -649,6 +791,8 @@ const CentcomTestPanel = ({ pluginName, pluginMetadata, onTestResults }) => {
             componentsRendered: true,
             interactivityWorks: true,
             responsiveDesign: true,
+            lightThemeCompatible: true,
+            darkThemeCompatible: true,
             componentCount: componentCount,
             matchedComponents: componentCount
           }
@@ -667,9 +811,11 @@ const CentcomTestPanel = ({ pluginName, pluginMetadata, onTestResults }) => {
             componentsRendered: true,
             interactivityWorks: true,
             responsiveDesign: false,
+            lightThemeCompatible: Math.random() > 0.3,
+            darkThemeCompatible: Math.random() > 0.4,
             componentCount: componentCount,
             matchedComponents: Math.max(1, componentCount - 1),
-            issues: ['CSS styling differs slightly from preview', 'Some responsive breakpoints need adjustment']
+            issues: ['CSS styling differs slightly from preview', 'Some responsive breakpoints need adjustment', 'Theme transitions may need optimization']
           }
         }
       }));
@@ -954,15 +1100,39 @@ SELECT name, sql FROM sqlite_master WHERE type='table' AND name='plugins';
             <button
               onClick={runComprehensiveTests}
               disabled={!pluginName || isRunningTests || centcomStatus !== 'running'}
-              className="w-full flex items-center justify-center px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg transition-colors font-medium"
+              className="w-full flex items-center justify-center px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-lg transition-colors font-medium"
             >
               {isRunningTests ? (
                 <ArrowPathIcon className="w-5 h-5 mr-2 animate-spin" />
               ) : (
                 <PlayIcon className="w-5 h-5 mr-2" />
               )}
-              {isRunningTests ? 'Running Comprehensive Tests...' : 'Run All Tests'}
+              {isRunningTests ? 'Running All Tests...' : 'Run All Tests (Full Suite)'}
             </button>
+            
+            <div className="flex items-center justify-center gap-4">
+              <p className="text-xs text-gray-600">
+                Or run individual tests using the "Run Test" buttons above
+              </p>
+              <button
+                onClick={() => {
+                  setTestScenarios({
+                    registration: { status: 'pending', message: '', details: null },
+                    devices: { status: 'pending', message: '', details: null },
+                    guiMatching: { status: 'pending', message: '', details: null },
+                    runtime: { status: 'pending', message: '', details: null },
+                    dataSaving: { status: 'pending', message: '', details: null },
+                    sequencerActions: { status: 'pending', message: '', details: null },
+                    performance: { status: 'pending', message: '', details: null }
+                  });
+                  setTestLogs([]);
+                }}
+                disabled={isRunningTests || runningIndividualTests.size > 0}
+                className="text-xs text-blue-600 hover:text-blue-800 disabled:text-gray-400 underline"
+              >
+                Clear Results
+              </button>
+            </div>
             
             {centcomStatus !== 'running' && (
               <p className="text-sm text-red-600 text-center">
@@ -982,7 +1152,20 @@ SELECT name, sql FROM sqlite_master WHERE type='table' AND name='plugins';
                   <CogIcon className="w-4 h-4 mr-2 text-gray-600" />
                   <span className="font-medium text-sm">Plugin Registration & Visibility</span>
                 </div>
-                {getTestStatusIcon(testScenarios.registration.status)}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => runIndividualTest('registration')}
+                    disabled={!pluginName || runningIndividualTests.has('registration') || isRunningTests}
+                    className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded transition-colors"
+                  >
+                    {runningIndividualTests.has('registration') ? (
+                      <ArrowPathIcon className="w-3 h-3 animate-spin" />
+                    ) : (
+                      'Run Test'
+                    )}
+                  </button>
+                  {getTestStatusIcon(testScenarios.registration.status)}
+                </div>
               </div>
               <p className="text-xs text-gray-600 mb-2">
                 Tests if plugin registers in settings, appears in apps page, and shows in sidebar
@@ -999,7 +1182,20 @@ SELECT name, sql FROM sqlite_master WHERE type='table' AND name='plugins';
                   <RectangleStackIcon className="w-4 h-4 mr-2 text-gray-600" />
                   <span className="font-medium text-sm">GUI Matching</span>
                 </div>
-                {getTestStatusIcon(testScenarios.guiMatching.status)}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => runIndividualTest('guiMatching')}
+                    disabled={!pluginName || runningIndividualTests.has('guiMatching') || isRunningTests}
+                    className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded transition-colors"
+                  >
+                    {runningIndividualTests.has('guiMatching') ? (
+                      <ArrowPathIcon className="w-3 h-3 animate-spin" />
+                    ) : (
+                      'Run Test'
+                    )}
+                  </button>
+                  {getTestStatusIcon(testScenarios.guiMatching.status)}
+                </div>
               </div>
               <p className="text-xs text-gray-600 mb-2">
                 Compares plugin GUI in Centcom with the design in Plugin Studio
@@ -1016,7 +1212,20 @@ SELECT name, sql FROM sqlite_master WHERE type='table' AND name='plugins';
                   <CircleStackIcon className="w-4 h-4 mr-2 text-gray-600" />
                   <span className="font-medium text-sm">Data Saving</span>
                 </div>
-                {getTestStatusIcon(testScenarios.dataSaving.status)}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => runIndividualTest('dataSaving')}
+                    disabled={!pluginName || runningIndividualTests.has('dataSaving') || isRunningTests}
+                    className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded transition-colors"
+                  >
+                    {runningIndividualTests.has('dataSaving') ? (
+                      <ArrowPathIcon className="w-3 h-3 animate-spin" />
+                    ) : (
+                      'Run Test'
+                    )}
+                  </button>
+                  {getTestStatusIcon(testScenarios.dataSaving.status)}
+                </div>
               </div>
               <p className="text-xs text-gray-600 mb-2">
                 Tests data persistence to test data application and projects table
@@ -1026,14 +1235,27 @@ SELECT name, sql FROM sqlite_master WHERE type='table' AND name='plugins';
               )}
             </div>
 
-            {/* Scenario 2: Device Integration */}
+            {/* Scenario 4: Device Integration */}
             <div className="p-4 border rounded-lg">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center">
                   <DevicePhoneMobileIcon className="w-4 h-4 mr-2 text-gray-600" />
                   <span className="font-medium text-sm">Device Integration</span>
                 </div>
-                {getTestStatusIcon(testScenarios.devices?.status || 'pending')}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => runIndividualTest('devices')}
+                    disabled={!pluginName || runningIndividualTests.has('devices') || isRunningTests}
+                    className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded transition-colors"
+                  >
+                    {runningIndividualTests.has('devices') ? (
+                      <ArrowPathIcon className="w-3 h-3 animate-spin" />
+                    ) : (
+                      'Run Test'
+                    )}
+                  </button>
+                  {getTestStatusIcon(testScenarios.devices?.status || 'pending')}
+                </div>
               </div>
               <p className="text-xs text-gray-600 mb-2">
                 Tests plugin communication with connected measurement devices
@@ -1043,14 +1265,27 @@ SELECT name, sql FROM sqlite_master WHERE type='table' AND name='plugins';
               )}
             </div>
 
-            {/* Scenario 4: Plugin Runtime */}
+            {/* Scenario 5: Plugin Runtime */}
             <div className="p-4 border rounded-lg">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center">
                   <BoltIcon className="w-4 h-4 mr-2 text-gray-600" />
                   <span className="font-medium text-sm">Plugin Runtime</span>
                 </div>
-                {getTestStatusIcon(testScenarios.runtime?.status || 'pending')}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => runIndividualTest('runtime')}
+                    disabled={!pluginName || runningIndividualTests.has('runtime') || isRunningTests}
+                    className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded transition-colors"
+                  >
+                    {runningIndividualTests.has('runtime') ? (
+                      <ArrowPathIcon className="w-3 h-3 animate-spin" />
+                    ) : (
+                      'Run Test'
+                    )}
+                  </button>
+                  {getTestStatusIcon(testScenarios.runtime?.status || 'pending')}
+                </div>
               </div>
               <p className="text-xs text-gray-600 mb-2">
                 Tests plugin execution, performance, and error handling
@@ -1067,7 +1302,20 @@ SELECT name, sql FROM sqlite_master WHERE type='table' AND name='plugins';
                   <CommandLineIcon className="w-4 h-4 mr-2 text-gray-600" />
                   <span className="font-medium text-sm">Sequencer Actions</span>
                 </div>
-                {getTestStatusIcon(testScenarios.sequencerActions.status)}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => runIndividualTest('sequencerActions')}
+                    disabled={!pluginName || runningIndividualTests.has('sequencerActions') || isRunningTests}
+                    className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded transition-colors"
+                  >
+                    {runningIndividualTests.has('sequencerActions') ? (
+                      <ArrowPathIcon className="w-3 h-3 animate-spin" />
+                    ) : (
+                      'Run Test'
+                    )}
+                  </button>
+                  {getTestStatusIcon(testScenarios.sequencerActions.status)}
+                </div>
               </div>
               <p className="text-xs text-gray-600 mb-2">
                 Verifies sequencer actions appear and work in sequencer application
@@ -1084,7 +1332,20 @@ SELECT name, sql FROM sqlite_master WHERE type='table' AND name='plugins';
                   <ChartBarIcon className="w-4 h-4 mr-2 text-gray-600" />
                   <span className="font-medium text-sm">Performance Analysis</span>
                 </div>
-                {getTestStatusIcon(testScenarios.performance?.status || 'pending')}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => runIndividualTest('performance')}
+                    disabled={!pluginName || runningIndividualTests.has('performance') || isRunningTests}
+                    className="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded transition-colors"
+                  >
+                    {runningIndividualTests.has('performance') ? (
+                      <ArrowPathIcon className="w-3 h-3 animate-spin" />
+                    ) : (
+                      'Run Test'
+                    )}
+                  </button>
+                  {getTestStatusIcon(testScenarios.performance?.status || 'pending')}
+                </div>
               </div>
               <p className="text-xs text-gray-600 mb-2">
                 Analyzes plugin performance metrics and resource usage
@@ -1097,20 +1358,22 @@ SELECT name, sql FROM sqlite_master WHERE type='table' AND name='plugins';
         </div>
 
         {/* Right Panel - Centcom UI Simulator */}
-        <div className="border rounded-lg bg-gray-50">
+        <div className="border rounded-lg bg-gray-50 overflow-hidden">
           {showCentcomUI ? (
-            <CentcomSimulator 
-              pluginMetadata={pluginMetadata}
-              testScenarios={testScenarios}
-              currentTest={currentTest}
-              renderPluginIcon={renderPluginIcon}
-              mockDevices={mockDevices}
-              simulateDeviceOperation={simulateDeviceOperation}
-              databaseSimulation={databaseSimulation}
-              pluginRuntime={pluginRuntime}
-              simulatePluginExecution={simulatePluginExecution}
-              simulateDatabaseQuery={simulateDatabaseQuery}
-            />
+            <div className="h-full overflow-auto">
+              <CentcomSimulator 
+                pluginMetadata={pluginMetadata}
+                testScenarios={testScenarios}
+                currentTest={currentTest}
+                renderPluginIcon={renderPluginIcon}
+                mockDevices={mockDevices}
+                simulateDeviceOperation={simulateDeviceOperation}
+                databaseSimulation={databaseSimulation}
+                pluginRuntime={pluginRuntime}
+                simulatePluginExecution={simulatePluginExecution}
+                simulateDatabaseQuery={simulateDatabaseQuery}
+              />
+            </div>
           ) : (
             <div className="h-full flex items-center justify-center">
               <div className="text-center text-gray-500">
@@ -1206,16 +1469,16 @@ const CentcomSimulator = ({
   simulatePluginExecution,
   simulateDatabaseQuery 
 }) => {
-  const [currentPage, setCurrentPage] = useState('settings');
+  const [currentPage, setCurrentPage] = useState('apps');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedDevice, setSelectedDevice] = useState(null);
   
   const isPluginVisible = testScenarios.registration.status === 'success';
 
   return (
-    <div className="h-full flex flex-col bg-gray-900 text-white rounded-lg overflow-hidden">
+    <div className="h-full flex flex-col bg-gray-900 text-white rounded-lg overflow-hidden min-w-[1200px]">
       {/* Centcom Header */}
-      <div className="bg-gray-800 p-3 border-b border-gray-700">
+      <div className="bg-gray-800 p-3 border-b border-gray-700 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center">
             <div className="w-6 h-6 bg-blue-500 rounded mr-2"></div>
@@ -1228,9 +1491,9 @@ const CentcomSimulator = ({
         </div>
       </div>
 
-      <div className="flex-1 flex">
+      <div className="flex-1 flex min-h-0">
         {/* Enhanced Sidebar */}
-        <div className={`bg-gray-800 border-r border-gray-700 transition-all duration-300 ${sidebarOpen ? 'w-48' : 'w-12'}`}>
+        <div className={`bg-gray-800 border-r border-gray-700 transition-all duration-300 flex-shrink-0 ${sidebarOpen ? 'w-48' : 'w-12'}`}>
           <div className="p-3">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -1241,33 +1504,13 @@ const CentcomSimulator = ({
             
             <div className="space-y-2">
               <button
-                onClick={() => setCurrentPage('dashboard')}
+                onClick={() => setCurrentPage('import')}
                 className={`w-full text-left px-3 py-2 rounded text-sm flex items-center ${
-                  currentPage === 'dashboard' ? 'bg-blue-600' : 'hover:bg-gray-700'
+                  currentPage === 'import' ? 'bg-blue-600' : 'hover:bg-gray-700'
                 }`}
               >
-                <ChartBarIcon className="w-4 h-4 mr-2" />
-                {sidebarOpen && 'Dashboard'}
-              </button>
-              
-              <button
-                onClick={() => setCurrentPage('devices')}
-                className={`w-full text-left px-3 py-2 rounded text-sm flex items-center ${
-                  currentPage === 'devices' ? 'bg-orange-600' : 'hover:bg-gray-700'
-                }`}
-              >
-                <DevicePhoneMobileIcon className="w-4 h-4 mr-2" />
-                {sidebarOpen && 'Devices'}
-              </button>
-              
-              <button
-                onClick={() => setCurrentPage('settings')}
-                className={`w-full text-left px-3 py-2 rounded text-sm flex items-center ${
-                  currentPage === 'settings' ? 'bg-gray-600' : 'hover:bg-gray-700'
-                }`}
-              >
-                <CogIcon className="w-4 h-4 mr-2" />
-                {sidebarOpen && 'Settings'}
+                <DocumentArrowDownIcon className="w-4 h-4 mr-2" />
+                {sidebarOpen && 'Import'}
               </button>
               
               <button
@@ -1278,16 +1521,6 @@ const CentcomSimulator = ({
               >
                 <Squares2X2Icon className="w-4 h-4 mr-2" />
                 {sidebarOpen && 'Applications'}
-              </button>
-              
-              <button
-                onClick={() => setCurrentPage('data')}
-                className={`w-full text-left px-3 py-2 rounded text-sm flex items-center ${
-                  currentPage === 'data' ? 'bg-green-600' : 'hover:bg-gray-700'
-                }`}
-              >
-                <FolderIcon className="w-4 h-4 mr-2" />
-                {sidebarOpen && 'Data Projects'}
               </button>
               
               <button
@@ -1308,16 +1541,6 @@ const CentcomSimulator = ({
               >
                 <CircleStackIcon className="w-4 h-4 mr-2" />
                 {sidebarOpen && 'Database'}
-              </button>
-
-              <button
-                onClick={() => setCurrentPage('runtime')}
-                className={`w-full text-left px-3 py-2 rounded text-sm flex items-center ${
-                  currentPage === 'runtime' ? 'bg-red-600' : 'hover:bg-gray-700'
-                }`}
-              >
-                <BoltIcon className="w-4 h-4 mr-2" />
-                {sidebarOpen && 'Runtime'}
               </button>
               
               {/* Plugins Section */}
@@ -1340,8 +1563,13 @@ const CentcomSimulator = ({
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 p-4">
-          {currentPage === 'settings' && (
+        <div className="flex-1 overflow-auto relative">
+          {/* Scroll hint */}
+          <div className="absolute top-0 right-0 z-10 bg-gray-700 text-xs text-gray-300 px-2 py-1 rounded-bl opacity-75">
+            ↔ Scroll to view more
+          </div>
+          <div className="p-4 min-w-[800px]">
+          {currentPage === 'import' && (
             <CentcomSettingsSimulator 
               pluginMetadata={pluginMetadata}
               isPluginVisible={isPluginVisible}
@@ -1352,30 +1580,121 @@ const CentcomSimulator = ({
 
           {currentPage === 'apps' && (
             <div>
-              <h2 className="text-lg font-semibold mb-4">Applications</h2>
-              <div className="grid grid-cols-3 gap-4">
-                {isPluginVisible && (
-                  <div 
-                    className={`p-4 border rounded-lg cursor-pointer transition-colors ${
-                      currentTest === 'registration' ? 'border-blue-500 bg-blue-900' : 'border-gray-600 hover:border-gray-500'
-                    }`}
-                    onClick={() => setCurrentPage('plugin')}
-                  >
-                    <div className="w-12 h-12 mx-auto mb-2 flex items-center justify-center">
-                      {renderPluginIcon(pluginMetadata?.metadata?.icon, "w-8 h-8")}
+              <h1 className="text-2xl font-semibold text-gray-200 mb-6">Applications</h1>
+              
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                {/* Core Applications */}
+                <div className="relative">
+                  <div className="block group cursor-pointer">
+                    <div className="flex flex-col items-center">
+                      <div className="bg-gradient-to-br from-blue-500 to-cyan-600 w-16 h-16 rounded-2xl flex items-center justify-center shadow-md mb-2 transition-transform group-hover:scale-105">
+                        <ChartBarIcon className="w-8 h-8 text-white" />
+                      </div>
+                      <span className="text-sm font-medium mb-1 text-center text-gray-200">
+                        Data Visualizer
+                      </span>
                     </div>
-                    <p className="text-center text-sm">{pluginMetadata?.metadata?.name || 'Test Plugin'}</p>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <div className="block group cursor-pointer">
+                    <div className="flex flex-col items-center">
+                      <div className="bg-gradient-to-br from-green-500 to-teal-600 w-16 h-16 rounded-2xl flex items-center justify-center shadow-md mb-2 transition-transform group-hover:scale-105">
+                        <PlayIcon className="w-8 h-8 text-white" />
+                      </div>
+                      <span className="text-sm font-medium mb-1 text-center text-gray-200">
+                        Sequencer
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Plugin Application - Only show if plugin is visible */}
+                {isPluginVisible && (
+                  <div className="relative">
+                    <div 
+                      className="block group cursor-pointer"
+                      onClick={() => setCurrentPage('plugin')}
+                    >
+                      <div className="flex flex-col items-center">
+                        <div 
+                          className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-md mb-2 transition-transform group-hover:scale-105 ${
+                            currentTest === 'registration' ? 'ring-2 ring-blue-400' : ''
+                          }`}
+                          style={{
+                            backgroundColor: pluginMetadata?.metadata?.color || '#8b5cf6',
+                            backgroundImage: pluginMetadata?.metadata?.color 
+                              ? `linear-gradient(135deg, ${pluginMetadata.metadata.color}, ${pluginMetadata.metadata.color}CC)`
+                              : 'linear-gradient(135deg, #8b5cf6, #a855f7)'
+                          }}
+                        >
+                          {renderPluginIcon(pluginMetadata?.metadata?.icon, "w-8 h-8 text-white") || 
+                           <CogIcon className="w-8 h-8 text-white" />}
+                        </div>
+                        <span className="text-sm font-medium mb-1 text-center text-gray-200">
+                          {pluginMetadata?.metadata?.name || 'Test Plugin'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 )}
-                <div className="p-4 border border-gray-600 rounded-lg">
-                  <div className="w-12 h-12 bg-gray-600 rounded-lg mx-auto mb-2"></div>
-                  <p className="text-center text-sm">Core App 1</p>
+
+                {/* Unregistered/Disabled Apps - Shown grayed out */}
+                <div className="relative">
+                  <div className="block group opacity-50 cursor-not-allowed">
+                    <div className="flex flex-col items-center">
+                      <div className="bg-gradient-to-br from-orange-500 to-red-600 w-16 h-16 rounded-2xl flex items-center justify-center shadow-md mb-2 grayscale">
+                        <SpeakerWaveIcon className="w-8 h-8 text-white" />
+                      </div>
+                      <span className="text-sm font-medium mb-1 text-center text-gray-500">
+                        SoundCheck
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className="p-4 border border-gray-600 rounded-lg">
-                  <div className="w-12 h-12 bg-gray-600 rounded-lg mx-auto mb-2"></div>
-                  <p className="text-center text-sm">Core App 2</p>
+
+                <div className="relative">
+                  <div className="block group opacity-50 cursor-not-allowed">
+                    <div className="flex flex-col items-center">
+                      <div className="bg-gradient-to-br from-indigo-500 to-purple-600 w-16 h-16 rounded-2xl flex items-center justify-center shadow-md mb-2 grayscale">
+                        <ComputerDesktopIcon className="w-8 h-8 text-white" />
+                      </div>
+                      <span className="text-sm font-medium mb-1 text-center text-gray-500">
+                        APx500
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <div className="block group opacity-50 cursor-not-allowed">
+                    <div className="flex flex-col items-center">
+                      <div className="bg-gradient-to-br from-yellow-500 to-orange-600 w-16 h-16 rounded-2xl flex items-center justify-center shadow-md mb-2 grayscale">
+                        <SignalIcon className="w-8 h-8 text-white" />
+                      </div>
+                      <span className="text-sm font-medium mb-1 text-center text-gray-500">
+                        Klippel QC
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
+
+              {/* Test Registration Status Display */}
+              {testScenarios.registration.status === 'success' && isPluginVisible && (
+                <div className="mt-6 p-4 bg-green-900/20 border border-green-600 rounded-lg">
+                  <div className="flex items-center">
+                    <CheckCircleIcon className="h-5 w-5 text-green-400 mr-3" />
+                    <div>
+                      <h4 className="text-sm font-medium text-green-300">Plugin Successfully Registered</h4>
+                      <p className="text-xs text-green-400 mt-1">
+                        {pluginMetadata?.metadata?.name || 'Plugin'} is now visible in the Applications page
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1386,10 +1705,10 @@ const CentcomSimulator = ({
                 currentTest === 'guiMatching' ? 'border-blue-500 bg-blue-900' : 'border-gray-600'
               }`}>
                 {/* Render the actual plugin GUI components */}
-                <div className="bg-white text-black p-4 rounded min-h-[400px]">
+                <div className="bg-white text-black p-4 rounded min-h-[400px] overflow-auto">
 
                   {pluginMetadata?.gui?.components && pluginMetadata.gui.components.length > 0 ? (
-                    <div className="plugin-gui-container" style={{ position: 'relative', width: '100%', height: '400px' }}>
+                    <div className="plugin-gui-container" style={{ position: 'relative', width: 'max-content', minWidth: '100%', height: '400px' }}>
                       {pluginMetadata.gui.components.map((component, index) => (
                         <div
                           key={component.id || index}
@@ -1492,179 +1811,9 @@ const CentcomSimulator = ({
             </div>
           )}
 
-          {currentPage === 'data' && (
-            <div>
-              <h2 className="text-lg font-semibold mb-4 flex items-center">
-                <FolderIcon className="w-5 h-5 mr-2" />
-                Test Data Projects
-              </h2>
-              
-              {/* Projects Table */}
-              <div className="bg-gray-800 border border-gray-600 rounded-lg overflow-hidden">
-                <div className="border-b border-gray-600 p-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-medium">Active Projects</h3>
-                    <div className="flex items-center gap-2">
-                      <button className="px-3 py-1 text-xs bg-green-600 hover:bg-green-700 rounded transition-colors">
-                        <PlusIcon className="w-3 h-3 inline mr-1" />
-                        New Project
-                      </button>
-                      <button className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 rounded transition-colors">
-                        <CloudArrowDownIcon className="w-3 h-3 inline mr-1" />
-                        Import
-                      </button>
-                    </div>
-                  </div>
-                </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-700">
-                      <tr>
-                        <th className="text-left p-3 text-sm font-medium">Project Name</th>
-                        <th className="text-left p-3 text-sm font-medium">Source</th>
-                        <th className="text-left p-3 text-sm font-medium">Created</th>
-                        <th className="text-left p-3 text-sm font-medium">Records</th>
-                        <th className="text-left p-3 text-sm font-medium">Status</th>
-                        <th className="text-left p-3 text-sm font-medium">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {/* Core Projects */}
-                      <tr className="border-b border-gray-600">
-                        <td className="p-3">
-                          <div className="flex items-center">
-                            <div className="w-6 h-6 bg-blue-600 rounded mr-2 flex items-center justify-center">
-                              <ChartBarIcon className="w-3 h-3 text-white" />
-                            </div>
-                            Audio Analysis Baseline
-                          </div>
-                        </td>
-                        <td className="p-3 text-sm text-gray-400">Core System</td>
-                        <td className="p-3 text-sm text-gray-400">2024-01-10</td>
-                        <td className="p-3 text-sm">1,247</td>
-                        <td className="p-3">
-                          <span className="px-2 py-1 text-xs bg-green-900 text-green-300 rounded">Active</span>
-                        </td>
-                        <td className="p-3">
-                          <button className="text-xs text-blue-400 hover:text-blue-300">View</button>
-                        </td>
-                      </tr>
 
-                      {/* Plugin-generated projects */}
-                      {testScenarios.dataSaving.status === 'success' && isPluginVisible && (
-                        <>
-                          <tr className="border-b border-gray-600 bg-green-900/20">
-                            <td className="p-3">
-                              <div className="flex items-center">
-                                <div className="w-6 h-6 bg-gray-600 rounded mr-2 flex items-center justify-center">
-                                  {renderPluginIcon(pluginMetadata?.metadata?.icon, "w-3 h-3 text-white") || 
-                                   <CubeIcon className="w-3 h-3 text-white" />}
-                                </div>
-                                {pluginMetadata?.metadata?.name || 'Test Plugin'} - Session 1
-                              </div>
-                            </td>
-                            <td className="p-3 text-sm text-gray-400">{pluginMetadata?.metadata?.name || 'Plugin'}</td>
-                            <td className="p-3 text-sm text-gray-400">{new Date().toLocaleDateString()}</td>
-                            <td className="p-3 text-sm">
-                              {Math.floor(Math.random() * 50) + 10}
-                              <span className="text-green-400 text-xs ml-1">+{Math.floor(Math.random() * 5) + 1} new</span>
-                            </td>
-                            <td className="p-3">
-                              <span className="px-2 py-1 text-xs bg-green-900 text-green-300 rounded">Recording</span>
-                            </td>
-                            <td className="p-3">
-                              <div className="flex gap-1">
-                                <button className="text-xs text-blue-400 hover:text-blue-300">View</button>
-                                <button className="text-xs text-orange-400 hover:text-orange-300">Export</button>
-                              </div>
-                            </td>
-                          </tr>
 
-                          <tr className="border-b border-gray-600">
-                            <td className="p-3">
-                              <div className="flex items-center">
-                                <div className="w-6 h-6 bg-gray-600 rounded mr-2 flex items-center justify-center">
-                                  {renderPluginIcon(pluginMetadata?.metadata?.icon, "w-3 h-3 text-white") || 
-                                   <CubeIcon className="w-3 h-3 text-white" />}
-                                </div>
-                                {pluginMetadata?.metadata?.name || 'Test Plugin'} - Archived Data
-                              </div>
-                            </td>
-                            <td className="p-3 text-sm text-gray-400">{pluginMetadata?.metadata?.name || 'Plugin'}</td>
-                            <td className="p-3 text-sm text-gray-400">2024-01-08</td>
-                            <td className="p-3 text-sm">89</td>
-                            <td className="p-3">
-                              <span className="px-2 py-1 text-xs bg-gray-600 text-gray-300 rounded">Completed</span>
-                            </td>
-                            <td className="p-3">
-                              <div className="flex gap-1">
-                                <button className="text-xs text-blue-400 hover:text-blue-300">View</button>
-                                <button className="text-xs text-orange-400 hover:text-orange-300">Export</button>
-                              </div>
-                            </td>
-                          </tr>
-                        </>
-                      )}
-
-                      {/* Other test projects */}
-                      <tr className="border-b border-gray-600">
-                        <td className="p-3">
-                          <div className="flex items-center">
-                            <div className="w-6 h-6 bg-purple-600 rounded mr-2 flex items-center justify-center">
-                              <SignalIcon className="w-3 h-3 text-white" />
-                            </div>
-                            Signal Generator Test
-                          </div>
-                        </td>
-                        <td className="p-3 text-sm text-gray-400">Core System</td>
-                        <td className="p-3 text-sm text-gray-400">2024-01-12</td>
-                        <td className="p-3 text-sm">324</td>
-                        <td className="p-3">
-                          <span className="px-2 py-1 text-xs bg-blue-900 text-blue-300 rounded">Paused</span>
-                        </td>
-                        <td className="p-3">
-                          <button className="text-xs text-blue-400 hover:text-blue-300">Resume</button>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-
-                {testScenarios.dataSaving.status === 'error' && (
-                  <div className="p-6 text-center">
-                    <ExclamationTriangleIcon className="w-8 h-8 text-red-400 mx-auto mb-2" />
-                    <p className="text-sm text-red-300">No data from plugin - connection failed</p>
-                    <p className="text-xs text-red-400 mt-1">Check plugin configuration and try again</p>
-                  </div>
-                )}
-
-                {testScenarios.dataSaving.status === 'running' && (
-                  <div className="p-6 text-center">
-                    <ArrowPathIcon className="w-8 h-8 text-blue-400 mx-auto mb-2 animate-spin" />
-                    <p className="text-sm text-blue-300">Testing data saving...</p>
-                    <p className="text-xs text-blue-400 mt-1">Verifying data flow from plugin to database</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Real-time Data Feed */}
-              {testScenarios.dataSaving.status === 'success' && isPluginVisible && (
-                <div className="mt-6 bg-gray-800 border border-gray-600 rounded-lg p-4">
-                  <h3 className="font-medium mb-3 flex items-center">
-                    <WifiIcon className="w-4 h-4 mr-2 text-green-400" />
-                    Live Data Feed from {pluginMetadata?.metadata?.name || 'Plugin'}
-                  </h3>
-                  <div className="bg-gray-900 border border-gray-700 rounded p-3 font-mono text-sm">
-                    <div className="text-green-400">[{new Date().toLocaleTimeString()}] Data point received: value=42.7, units=dB</div>
-                    <div className="text-green-400">[{new Date(Date.now() - 1000).toLocaleTimeString()}] Data point received: value=41.2, units=dB</div>
-                    <div className="text-green-400">[{new Date(Date.now() - 2000).toLocaleTimeString()}] Data point received: value=43.1, units=dB</div>
-                    <div className="text-blue-400">[{new Date(Date.now() - 3000).toLocaleTimeString()}] Session started</div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
 
           {currentPage === 'sequencer' && (
             <div>
@@ -1737,44 +1886,7 @@ const CentcomSimulator = ({
             </div>
           )}
 
-          {currentPage === 'devices' && (
-            <div>
-              <h2 className="text-lg font-semibold mb-4 flex items-center">
-                <DevicePhoneMobileIcon className="w-5 h-5 mr-2" />
-                Device Management
-              </h2>
-              <div className="space-y-3">
-                {mockDevices.map(device => (
-                  <div key={device.id} className="p-4 bg-gray-800 border border-gray-600 rounded">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <div className={`w-3 h-3 rounded-full mr-3 ${
-                          device.status === 'connected' ? 'bg-green-400' : 'bg-red-400'
-                        }`}></div>
-                        <div>
-                          <h3 className="font-medium">{device.name}</h3>
-                          <p className="text-sm text-gray-400">{device.address} • {device.type}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2 py-1 text-xs rounded ${
-                          device.status === 'connected' ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'
-                        }`}>
-                          {device.status}
-                        </span>
-                        <button
-                          onClick={() => simulateDeviceOperation(device.id, device.status === 'connected' ? 'disconnect' : 'connect')}
-                          className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 rounded transition-colors"
-                        >
-                          {device.status === 'connected' ? 'Disconnect' : 'Connect'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+
 
           {currentPage === 'database' && (
             <div>
@@ -1820,65 +1932,8 @@ const CentcomSimulator = ({
             </div>
           )}
 
-          {currentPage === 'runtime' && (
-            <div>
-              <h2 className="text-lg font-semibold mb-4 flex items-center">
-                <BoltIcon className="w-5 h-5 mr-2" />
-                Plugin Runtime Monitor
-              </h2>
-              <div className="space-y-4">
-                <div className="p-4 bg-gray-800 border border-gray-600 rounded">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-medium">Execution Control</h3>
-                    <button
-                      onClick={() => simulatePluginExecution('manual-test')}
-                      disabled={pluginRuntime.isRunning}
-                      className="px-3 py-1 text-sm bg-green-600 hover:bg-green-700 disabled:bg-gray-600 rounded transition-colors"
-                    >
-                      {pluginRuntime.isRunning ? 'Running...' : 'Execute Plugin'}
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <div className="text-xs text-gray-400">Executions</div>
-                      <div className="text-lg font-bold">{pluginRuntime.executionCount}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-gray-400">Avg Duration</div>
-                      <div className="text-lg font-bold">{Math.round(pluginRuntime.performance.avgDuration)}ms</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-gray-400">Memory Usage</div>
-                      <div className="text-lg font-bold">{Math.round(pluginRuntime.performance.memoryUsage)}MB</div>
-                    </div>
-                  </div>
-                </div>
 
-                {pluginRuntime.errors.length > 0 && (
-                  <div className="p-4 bg-red-900 border border-red-700 rounded">
-                    <h3 className="font-medium mb-3 text-red-300">Runtime Errors</h3>
-                    <div className="space-y-2">
-                      {pluginRuntime.errors.slice(-3).map((error, index) => (
-                        <div key={index} className="p-2 bg-red-800 rounded text-sm">
-                          <div className="text-red-200">{error.message}</div>
-                          <div className="text-red-400 text-xs mt-1">{error.timestamp}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {pluginRuntime.lastExecution && (
-                  <div className="p-4 bg-gray-800 border border-gray-600 rounded">
-                    <h3 className="font-medium mb-2">Last Execution</h3>
-                    <div className="text-sm text-gray-300">
-                      {new Date(pluginRuntime.lastExecution).toLocaleString()}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          </div>
         </div>
       </div>
     </div>

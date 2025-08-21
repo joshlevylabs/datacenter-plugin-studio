@@ -31,21 +31,7 @@ interface CodeGenerationOptions {
 }
 
 export class GUICodeGenerator {
-  private static readonly COMPONENT_IMPORTS = {
-    // Heroicons imports
-    icons: [
-      'BeakerIcon', 'DocumentArrowUpIcon', 'ChartBarIcon', 'CogIcon',
-      'FolderOpenIcon', 'PlayIcon', 'StopIcon', 'PauseIcon',
-      'DevicePhoneMobileIcon', 'WifiIcon', 'SignalIcon', 'CloudIcon',
-      'ExclamationTriangleIcon', 'CheckCircleIcon', 'ClockIcon',
-      'PresentationChartLineIcon', 'TableCellsIcon', 'CircleStackIcon', 'BoltIcon',
-      'RadioIcon', 'Square3Stack3DIcon', 'DocumentChartBarIcon'
-    ],
-    // React imports
-    react: ['React', 'useState', 'useEffect', 'useCallback'],
-    // Centcom API imports
-    centcom: ['createCentcomAPI', 'CentcomUtils']
-  };
+  // Component imports removed - not currently used
 
   /**
    * Generate complete React component code from GUI configuration
@@ -189,24 +175,28 @@ export class GUICodeGenerator {
 
     // Component-specific state
     config.components.forEach(component => {
+      // Ensure valid component ID
+      const safeId = component.id.replace(/[^a-zA-Z0-9_]/g, '').replace(/^[0-9]/, '_$&') || 'component';
+      const pascalId = this.toPascalCase(component.id);
+      
       switch (component.type) {
         case 'deviceConnector':
-          declarations.push(`  const [${component.id}_connected, set${this.toPascalCase(component.id)}_connected] = useState(false);`);
-          declarations.push(`  const [${component.id}_status, set${this.toPascalCase(component.id)}_status] = useState('disconnected');`);
+          declarations.push(`  const [${safeId}_connected, set${pascalId}_connected] = useState(false);`);
+          declarations.push(`  const [${safeId}_status, set${pascalId}_status] = useState('disconnected');`);
           break;
         case 'sensorMonitor':
-          declarations.push(`  const [${component.id}_value, set${this.toPascalCase(component.id)}_value] = useState(${component.props.currentValue || 0});`);
+          declarations.push(`  const [${safeId}_value, set${pascalId}_value] = useState(${component.props.currentValue || 0});`);
           break;
         case 'dataLogger':
-          declarations.push(`  const [${component.id}_logging, set${this.toPascalCase(component.id)}_logging] = useState(false);`);
-          declarations.push(`  const [${component.id}_data, set${this.toPascalCase(component.id)}_data] = useState([]);`);
+          declarations.push(`  const [${safeId}_logging, set${pascalId}_logging] = useState(false);`);
+          declarations.push(`  const [${safeId}_data, set${pascalId}_data] = useState([]);`);
           break;
         case 'sequenceController':
-          declarations.push(`  const [${component.id}_running, set${this.toPascalCase(component.id)}_running] = useState(false);`);
-          declarations.push(`  const [${component.id}_currentStep, set${this.toPascalCase(component.id)}_currentStep] = useState(0);`);
+          declarations.push(`  const [${safeId}_running, set${pascalId}_running] = useState(false);`);
+          declarations.push(`  const [${safeId}_currentStep, set${pascalId}_currentStep] = useState(0);`);
           break;
         case 'realtimeChart':
-          declarations.push(`  const [${component.id}_chartData, set${this.toPascalCase(component.id)}_chartData] = useState([]);`);
+          declarations.push(`  const [${safeId}_chartData, set${pascalId}_chartData] = useState([]);`);
           break;
       }
     });
@@ -249,9 +239,10 @@ export class GUICodeGenerator {
     
     ${deviceComponents.map(component => {
       if (component.type === 'sensorMonitor') {
+        const pascalId = this.toPascalCase(component.id);
         return `    // Subscribe to ${component.id} sensor data
     centcomAPI.subscribeToDevice('${component.props.deviceId || 'sensor'}', (data) => {
-      set${this.toPascalCase(component.id)}_value(data.value);
+      set${pascalId}_value(data.value);
     });`;
       }
       return '';
@@ -269,21 +260,24 @@ export class GUICodeGenerator {
   /**
    * Generate event handlers
    */
-  private static generateEventHandlers(config: GUIConfiguration, options: CodeGenerationOptions): string {
-    const handlers = [];
+  private static generateEventHandlers(config: GUIConfiguration, _options: CodeGenerationOptions): string {
+    const handlers: string[] = [];
 
     config.components.forEach(component => {
+      // Ensure valid component ID for handlers
+      const pascalId = this.toPascalCase(component.id);
+      
       switch (component.type) {
         case 'deviceConnector':
-          handlers.push(`  const handle${this.toPascalCase(component.id)}Connect = useCallback(async () => {
+          handlers.push(`  const handle${pascalId}Connect = useCallback(async () => {
     if (!centcomAPI) return;
     
     try {
       setLoading(true);
       const success = await centcomAPI.connectDevice('${component.props.deviceId || 'device'}');
       if (success) {
-        set${this.toPascalCase(component.id)}_connected(true);
-        set${this.toPascalCase(component.id)}_status('connected');
+        set${pascalId}_connected(true);
+        set${pascalId}_status('connected');
       }
     } catch (err) {
       setError(err.message);
@@ -293,15 +287,15 @@ export class GUICodeGenerator {
     }
   }, [centcomAPI, onError]);
 
-  const handle${this.toPascalCase(component.id)}Disconnect = useCallback(async () => {
+  const handle${pascalId}Disconnect = useCallback(async () => {
     if (!centcomAPI) return;
     
     try {
       setLoading(true);
       const success = await centcomAPI.disconnectDevice('${component.props.deviceId || 'device'}');
       if (success) {
-        set${this.toPascalCase(component.id)}_connected(false);
-        set${this.toPascalCase(component.id)}_status('disconnected');
+        set${pascalId}_connected(false);
+        set${pascalId}_status('disconnected');
       }
     } catch (err) {
       setError(err.message);
@@ -313,11 +307,11 @@ export class GUICodeGenerator {
           break;
 
         case 'dataLogger':
-          handlers.push(`  const handle${this.toPascalCase(component.id)}StartLogging = useCallback(async () => {
+          handlers.push(`  const handle${pascalId}StartLogging = useCallback(async () => {
     if (!centcomAPI) return;
     
     try {
-      set${this.toPascalCase(component.id)}_logging(true);
+      set${pascalId}_logging(true);
       // Start data logging logic here
     } catch (err) {
       setError(err.message);
@@ -325,9 +319,9 @@ export class GUICodeGenerator {
     }
   }, [centcomAPI, onError]);
 
-  const handle${this.toPascalCase(component.id)}StopLogging = useCallback(async () => {
+  const handle${pascalId}StopLogging = useCallback(async () => {
     try {
-      set${this.toPascalCase(component.id)}_logging(false);
+      set${pascalId}_logging(false);
       // Stop data logging logic here
     } catch (err) {
       setError(err.message);
@@ -337,7 +331,7 @@ export class GUICodeGenerator {
           break;
 
         case 'sequenceController':
-          handlers.push(`  const handle${this.toPascalCase(component.id)}Start = useCallback(async () => {
+          handlers.push(`  const handle${pascalId}Start = useCallback(async () => {
     if (!centcomAPI) return;
     
     try {
@@ -350,7 +344,7 @@ export class GUICodeGenerator {
       
       const success = await centcomAPI.startSequence(sequenceId);
       if (success) {
-        set${this.toPascalCase(component.id)}_running(true);
+        set${pascalId}_running(true);
       }
     } catch (err) {
       setError(err.message);
@@ -358,10 +352,10 @@ export class GUICodeGenerator {
     }
   }, [centcomAPI, onError]);
 
-  const handle${this.toPascalCase(component.id)}Stop = useCallback(async () => {
+  const handle${pascalId}Stop = useCallback(async () => {
     try {
-      set${this.toPascalCase(component.id)}_running(false);
-      set${this.toPascalCase(component.id)}_currentStep(0);
+      set${pascalId}_running(false);
+      set${pascalId}_currentStep(0);
     } catch (err) {
       setError(err.message);
       onError?.(err.message);
@@ -458,7 +452,7 @@ export class GUICodeGenerator {
   /**
    * Generate JSX for individual component
    */
-  private static generateComponentJSX(component: GUIComponent, options: CodeGenerationOptions): string {
+  private static generateComponentJSX(component: GUIComponent, _options: CodeGenerationOptions): string {
     const componentId = component.id;
     const indent = '        ';
 
@@ -687,7 +681,14 @@ document.head.appendChild(styleSheet);`;
 
   // Utility methods
   private static toPascalCase(str: string): string {
-    return str.replace(/(^\w|_\w)/g, (match) => match.replace('_', '').toUpperCase());
+    // Clean the string to ensure valid JavaScript identifiers
+    const cleaned = str
+      .replace(/[^a-zA-Z0-9_]/g, '') // Remove invalid characters
+      .replace(/^[0-9]/, '_$&')      // Prefix numbers with underscore
+      .replace(/(^\w|_\w)/g, (match) => match.replace('_', '').toUpperCase());
+    
+    // Ensure we have a valid identifier
+    return cleaned || 'Component';
   }
 
   private static extractUsedIcons(config: GUIConfiguration): string[] {

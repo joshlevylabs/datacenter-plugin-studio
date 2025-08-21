@@ -5,8 +5,7 @@ use serde::{Serialize, Deserialize};
 use std::path::PathBuf;
 use tauri::command;
 use tauri_plugin_fs::FsExt;
-use ring::signature::{RsaKeyPair, RSA_PKCS1_SHA256, KeyPair, UnparsedPublicKey, RSA_PKCS1_2048_8192_SHA256};
-use ring::rand::SystemRandom;
+// Removed unused crypto imports
 use base64::{Engine as _, engine::general_purpose};
 use serde_json::Value;
 
@@ -149,14 +148,14 @@ async fn generate_rsa_keys(key_size: u32) -> Result<KeyPairResult, String> {
 #[command]
 async fn sign_license(
   payload: String,
-  private_key: String,
-  algorithm: String,
-  hash_algorithm: String,
+  _private_key: String,
+  _algorithm: String,
+  _hash_algorithm: String,
 ) -> Result<String, String> {
   // For demonstration, create a simple signature
   // In production, use proper cryptographic signing
   let timestamp = chrono::Utc::now().timestamp();
-  let signature_data = format!("{}:{}:{}:{}", payload, algorithm, hash_algorithm, timestamp);
+  let signature_data = format!("{}:{}:{}:{}", payload, _algorithm, _hash_algorithm, timestamp);
   let signature = general_purpose::STANDARD.encode(signature_data.as_bytes());
   
   Ok(signature)
@@ -166,9 +165,9 @@ async fn sign_license(
 async fn verify_license_signature(
   payload: String,
   signature: String,
-  public_key: String,
-  algorithm: String,
-  hash_algorithm: String,
+  _public_key: String,
+  _algorithm: String,
+  _hash_algorithm: String,
 ) -> Result<bool, String> {
   // For demonstration, perform basic validation
   // In production, use proper cryptographic verification
@@ -262,7 +261,7 @@ async fn validate_plugin_license(
 async fn check_feature_access(
   plugin_id: String,
   license_key: String,
-  feature_id: String,
+  _feature_id: String,
 ) -> Result<bool, String> {
   // Validate license first
   let validation = validate_plugin_license(plugin_id, license_key).await?;
